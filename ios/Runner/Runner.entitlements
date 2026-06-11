@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required to call PKAddPassesViewController and pass .pkpass
+	     files into Apple Wallet. Provision this app with a Pass Type
+	     ID that matches WALLET_PASS_TYPE_IDENTIFIER (defaults to
+	     pass.com.airpak-express.shipnow). -->
+	<key>com.apple.developer.pass-type-identifiers</key>
+	<array>
+		<string>pass.com.airpak-express.shipnow</string>
+	</array>
+	<!-- Push notifications: required for FCM. Apple Developer Console
+	     must have the APNs key/cert configured against the same Pass
+	     Type / Bundle ID. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- Associated domains: deep linking from Wallet updates and
+	     universal links. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:airpak-express.com</string>
+	</array>
+</dict>
+</plist>

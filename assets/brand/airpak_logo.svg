@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AirPak Express — brand logo
+  Red script "Airpak" in a dynamic-italic signature style with a
+  courier motion underline. The design is engineered to remain
+  legible at 16x16 (favicon) and crisp at 4K.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 320 100"
+     fill="none"
+     role="img"
+     aria-label="AirPak Express">
+  <defs>
+    <linearGradient id="airpakRed" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#E11D2A"/>
+      <stop offset="55%"  stop-color="#DC2626"/>
+      <stop offset="100%" stop-color="#B91C1C"/>
+    </linearGradient>
+    <linearGradient id="airpakUnderline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"  stop-color="#DC2626" stop-opacity="0"/>
+      <stop offset="20%" stop-color="#DC2626" stop-opacity="0.8"/>
+      <stop offset="80%" stop-color="#DC2626" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#DC2626" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hand-tuned signature "Airpak" in flowing italic.
+       Curves modelled with quadratic Bézier paths to capture the
+       stroke weight and rhythm of the original brand. -->
+  <g fill="url(#airpakRed)">
+    <!-- A  (rising loop) -->
+    <path d="M 12 64
+             C 12 50, 22 38, 36 38
+             C 47 38, 53 44, 53 53
+             C 53 56, 51 58, 47 58
+             C 44 58, 42 56, 42 53
+             C 42 49, 45 46, 49 46
+             L 53 46
+             C 50 42, 44 40, 38 40
+             C 28 40, 21 49, 21 60
+             C 21 68, 26 73, 33 73
+             C 38 73, 43 71, 47 67
+             L 50 70
+             C 45 75, 38 78, 31 78
+             C 20 78, 12 73, 12 64 Z"/>
+
+    <!-- i  (dot + body) -->
+    <circle cx="65" cy="32" r="4.5"/>
+    <path d="M 60 48
+             C 60 45, 62 43, 65 43
+             C 68 43, 70 45, 70 48
+             L 70 72
+             C 70 75, 68 77, 65 77
+             C 62 77, 60 75, 60 72
+             L 60 48 Z"/>
+
+    <!-- r -->
+    <path d="M 78 48
+             C 78 45, 80 43, 83 43
+             C 86 43, 88 45, 88 48
+             L 88 51
+             C 91 46, 95 43, 100 43
+             C 103 43, 105 45, 105 48
+             C 105 50, 103 52, 100 52
+             C 95 52, 92 55, 90 60
+             L 88 68
+             L 88 72
+             C 88 75, 86 77, 83 77
+             C 80 77, 78 75, 78 72
+             L 78 48 Z"/>
+
+    <!-- p  (descender) -->
+    <path d="M 110 48
+             C 110 45, 112 43, 115 43
+             C 118 43, 120 45, 120 48
+             L 120 50
+             C 124 45, 129 43, 134 43
+             C 144 43, 150 50, 150 60
+             C 150 70, 144 77, 134 77
+             C 129 77, 124 75, 120 71
+             L 120 86
+             C 120 89, 118 91, 115 91
+             C 112 91, 110 89, 110 86
+             L 110 48 Z
+             M 134 51
+             C 128 51, 123 55, 121 60
+             C 122 65, 127 69, 134 69
+             C 140 69, 144 65, 144 60
+             C 144 55, 140 51, 134 51 Z"/>
+
+    <!-- a -->
+    <path d="M 156 60
+             C 156 50, 162 43, 172 43
+             C 178 43, 182 45, 184 49
+             L 184 48
+             C 184 45, 186 43, 189 43
+             C 192 43, 194 45, 194 48
+             L 194 72
+             C 194 75, 192 77, 189 77
+             C 186 77, 184 75, 184 72
+             L 184 71
+             C 182 75, 178 77, 172 77
+             C 162 77, 156 70, 156 60 Z
+             M 172 51
+             C 166 51, 162 55, 162 60
+             C 162 65, 166 69, 172 69
+             C 178 69, 184 65, 184 60
+             C 184 55, 178 51, 172 51 Z"/>
+
+    <!-- k -->
+    <path d="M 202 30
+             C 202 27, 204 25, 207 25
+             C 210 25, 212 27, 212 30
+             L 212 56
+             L 222 47
+             C 224 45, 226 45, 228 47
+             C 230 49, 230 51, 228 53
+             L 220 60
+             L 230 71
+             C 232 73, 232 75, 230 77
+             C 228 79, 226 79, 224 77
+             L 212 64
+             L 212 72
+             C 212 75, 210 77, 207 77
+             C 204 77, 202 75, 202 72
+             L 202 30 Z"/>
+  </g>
+
+  <!-- Courier motion underline (red gradient fading on the ends) -->
+  <rect x="6" y="86" width="280" height="2.2" rx="1.1"
+        fill="url(#airpakUnderline)"/>
+</svg>

@@ -1,0 +1,17 @@
+// Add the google-services plugin to the top of android/settings.gradle:
+//
+//   plugins {
+//     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+//     id "com.android.application" version "8.0.0" apply false
+//     id "org.jetbrains.kotlin.android" version "1.9.0" apply false
+//     id "com.google.gms.google-services" version "4.4.2" apply false   // <-- add this
+//   }
+//
+// Then in android/build.gradle (project-level):
+//
+//   dependencies {
+//     classpath "com.google.gms:google-services:4.4.2"   // <-- add this
+//   }
+//
+// Finally drop `google-services.json` (renamed from the template in
+// android/app/google-services.json.template) into android/app/.

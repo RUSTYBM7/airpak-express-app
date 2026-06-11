@@ -1,0 +1,19 @@
+# Build artifacts
+build/
+.dart_tool/
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+
+# Editor
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Local env
+.env
+.env.local
+*.local
