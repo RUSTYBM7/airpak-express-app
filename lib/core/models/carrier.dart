@@ -119,6 +119,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.mail_rounded,
     rating: 4.3,
     eta: '4–8 days',
+    logoAsset: 'assets/carriers/royal_mail.svg',
   ),
   Carrier(
     id: 'aramex',
@@ -131,6 +132,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.flight_rounded,
     rating: 4.4,
     eta: '2–6 days',
+    logoAsset: 'assets/carriers/aramex.svg',
   ),
   Carrier(
     id: 'jnt',
@@ -143,6 +145,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.departure_board_rounded,
     rating: 4.4,
     eta: '2–5 days',
+    logoAsset: 'assets/carriers/jt_express.svg',
   ),
   Carrier(
     id: 'sf',
@@ -155,6 +158,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.directions_boat_rounded,
     rating: 4.6,
     eta: '2–5 days',
+    logoAsset: 'assets/carriers/sf_express.svg',
   ),
   Carrier(
     id: 'ems',
@@ -167,6 +171,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.public_rounded,
     rating: 4.1,
     eta: '5–12 days',
+    logoAsset: 'assets/carriers/ems.svg',
   ),
   Carrier(
     id: 'dpd',
@@ -192,6 +197,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.local_post_office_rounded,
     rating: 4.2,
     eta: '5–10 days',
+    logoAsset: 'assets/carriers/australia_post.svg',
   ),
   Carrier(
     id: 'canada',
@@ -204,6 +210,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.map_rounded,
     rating: 4.1,
     eta: '5–12 days',
+    logoAsset: 'assets/carriers/canada_post.svg',
   ),
   Carrier(
     id: 'yodel',
@@ -216,6 +223,7 @@ const List<Carrier> kWorldwideCarriers = [
     icon: Icons.warehouse_rounded,
     rating: 3.9,
     eta: '3–7 days',
+    logoAsset: 'assets/carriers/yodel.svg',
   ),
   Carrier(
     id: 'glovo',

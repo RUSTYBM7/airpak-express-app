@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/design_system.dart';
+import '../../../core/widgets/airpak_brand.dart';
 import '../../../app/router.dart';
 import '../../../core/data/repositories.dart';
 import '../../../core/models/shipment.dart';
@@ -31,13 +32,11 @@ class PortalDashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.bgColor,
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
-            const BrandMark(size: 32),
-            const SizedBox(width: 8),
-            const Text('ShipNow',
-                style: TextStyle(
-                    fontSize: 17, fontWeight: FontWeight.w800)),
+            BrandMark(size: 32),
+            SizedBox(width: 8),
+            AirpakWordmark(size: 18, showUnderline: false, showR: false),
           ],
         ),
         actions: [

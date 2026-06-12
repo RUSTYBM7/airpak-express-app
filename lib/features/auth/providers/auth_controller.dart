@@ -75,11 +75,19 @@ class AuthController extends StateNotifier<AuthState> {
         }
       });
     } else {
-      // Mock mode: stay signed OUT on first launch. The user is
-      // taken to the welcome screen, and can sign in with the demo
-      // credentials, or use the Continue as guest button to skip
-      // straight into the demo experience.
-      state = const AuthState(initializing: false);
+      // Mock mode: auto-create the demo customer session so the
+      // portal is explorable without going through the auth flow.
+      // The user can sign out from Settings to test the auth flow.
+      final res = await _repo.getProfile('usr_demo_customer');
+      final profile = res.data;
+      state = AuthState(
+        initializing: false,
+        authenticated: true,
+        userId: profile?.id ?? 'usr_demo_customer',
+        email: profile?.email ?? 'demo@airpak-express.com',
+        role: profile?.role ?? UserRole.customer,
+        profile: profile,
+      );
     }
   }
 

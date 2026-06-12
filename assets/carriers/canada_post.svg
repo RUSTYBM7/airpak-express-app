@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Canada Post — custom authentic-style mark.
+  Red maple leaf above "POSTES CANADA" / "CANADA POST" wordmark.
+  -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 100">
+  <defs>
+    <linearGradient id="cpRed" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E1141A"/>
+      <stop offset="100%" stop-color="#A30D12"/>
+    </linearGradient>
+  </defs>
+  <!-- Simplified maple leaf -->
+  <g transform="translate(34,12)" fill="url(#cpRed)">
+    <path d="M 22 0 L 26 14 L 38 10 L 32 22 L 44 22 L 36 30 L 44 38 L 32 36 L 34 48 L 22 40 L 10 48 L 12 36 L 0 38 L 8 30 L 0 22 L 12 22 L 6 10 L 18 14 Z"/>
+  </g>
+  <!-- Wordmark "POSTES CANADA" with "CANADA POST" below -->
+  <g fill="url(#cpRed)" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="900">
+    <text x="78" y="42" font-size="16" letter-spacing="0.3">POSTES CANADA</text>
+    <text x="78" y="62" font-size="16" letter-spacing="0.3">CANADA POST</text>
+  </g>
+</svg>

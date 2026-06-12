@@ -6,24 +6,22 @@ import '../../app/design_system.dart';
 
 /// AirPak Express brand assets.
 ///
-/// Three variants:
-/// - [AirpakWordmark]  — the "Airpak" wordmark in bold sans-serif,
-///   with the courier motion underline. Used on splash, login, hero
-///   sections, and the app header.
-/// - [AirpakMark]      — the square monogram (red rounded square with
-///   a paper-plane "A"). Used for avatars, tab icons, the home tile,
-///   and the live-map pin.
+/// The actual brand uses a custom flowing script "Airpak" with a small
+/// ® mark and "AIRPAK EXPRESS" as a letter-spaced wordmark below.
+/// For Flutter web we approximate the script with Google Fonts
+/// [Pacifico] (closest match) and inline a custom ® glyph + brand
+/// subtitle.
 class AirpakWordmark extends StatelessWidget {
   final double size;
   final Color? color;
   final bool showUnderline;
-  final FontWeight weight;
+  final bool showR;
   const AirpakWordmark({
     super.key,
-    this.size = 36,
+    this.size = 28,
     this.color,
     this.showUnderline = true,
-    this.weight = FontWeight.w900,
+    this.showR = true,
   });
   @override
   Widget build(BuildContext context) {
@@ -34,45 +32,44 @@ class AirpakWordmark extends StatelessWidget {
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Air',
-                style: GoogleFonts.inter(
-                    fontSize: size,
-                    fontWeight: weight,
-                    color: c,
-                    letterSpacing: -0.02 * size,
-                    height: 1.0)),
-            Transform.translate(
-              offset: const Offset(0, 0),
-              child: Container(
-                margin: EdgeInsets.symmetric(horizontal: size * 0.04),
-                width: size * 0.12,
-                height: size * 0.12,
-                decoration: BoxDecoration(
-                  color: c,
-                  shape: BoxShape.circle,
-                ),
+            Text(
+              'Airpak',
+              style: GoogleFonts.pacifico(
+                fontSize: size * 1.5,
+                fontWeight: FontWeight.w400,
+                color: c,
+                height: 1.0,
+                letterSpacing: 0.5,
               ),
             ),
-            Text('pak',
-                style: GoogleFonts.inter(
-                    fontSize: size,
-                    fontWeight: weight,
+            if (showR)
+              Padding(
+                padding: EdgeInsets.only(top: size * 0.1, left: 1),
+                child: Text(
+                  '®',
+                  style: TextStyle(
                     color: c,
-                    letterSpacing: -0.02 * size,
-                    height: 1.0)),
+                    fontSize: size * 0.6,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
           ],
         ),
         if (showUnderline)
           Container(
-            margin: EdgeInsets.only(top: size * 0.10),
-            height: size * 0.10,
-            width: size * 3.0,
+            margin: EdgeInsets.only(top: size * 0.14, left: 2),
+            height: size * 0.08,
+            width: size * 4.2,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [c.withValues(alpha: 0.0), c, c.withValues(alpha: 0.0)],
+                colors: [
+                  c.withValues(alpha: 0.0),
+                  c,
+                  c.withValues(alpha: 0.0),
+                ],
               ),
               borderRadius: BorderRadius.circular(99),
             ),
@@ -82,7 +79,8 @@ class AirpakWordmark extends StatelessWidget {
   }
 }
 
-/// Square compact mark used for small UI surfaces.
+/// Square compact mark used for small UI surfaces — uses the AirPak
+/// mark SVG with a paper-plane "A".
 class AirpakMark extends StatelessWidget {
   final double size;
   final Color? bg;
@@ -121,8 +119,7 @@ class AirpakMark extends StatelessWidget {
   }
 }
 
-/// The full lockup used on splash + login: wordmark + "EXPRESS"
-/// subtitle underneath.
+/// Full lockup used on splash + login: mark + script wordmark + AIRPAK EXPRESS.
 class AirpakBrandLockup extends StatelessWidget {
   final double width;
   final Color? color;
@@ -136,39 +133,45 @@ class AirpakBrandLockup extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AirpakMark(size: width * 0.35, bg: c),
-          const SizedBox(height: 14),
-          AirpakWordmark(size: width * 0.22, color: c),
-          const SizedBox(height: 6),
-          Text('E X P R E S S',
-              style: TextStyle(
-                  color: c,
-                  fontSize: 11,
-                  letterSpacing: 6,
-                  fontWeight: FontWeight.w900)),
+          AirpakMark(size: width * 0.30, bg: c),
+          const SizedBox(height: 16),
+          AirpakWordmark(size: width * 0.18, color: c, showR: true),
+          const SizedBox(height: 4),
+          Text(
+            'AIRPAK EXPRESS',
+            style: TextStyle(
+              color: c,
+              fontSize: 10,
+              letterSpacing: 4,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Convenience widget for the header logo: square mark + small wordmark.
+/// Header logo: square mark + small wordmark side by side.
 class AirpakHeaderLogo extends StatelessWidget {
   final double markSize;
   final double textSize;
+  final bool showR;
   const AirpakHeaderLogo({
     super.key,
     this.markSize = 36,
-    this.textSize = 18,
+    this.textSize = 22,
+    this.showR = false,
   });
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         AirpakMark(size: markSize),
         const SizedBox(width: 10),
-        AirpakWordmark(size: textSize, showUnderline: false),
+        AirpakWordmark(size: textSize, showUnderline: false, showR: showR),
       ],
     );
   }

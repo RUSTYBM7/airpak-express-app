@@ -13,7 +13,7 @@ class ShipNowApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final mode = ref.watch(themeControllerProvider);
     return MaterialApp.router(
-      title: 'ShipNow',
+      title: 'AirPak Express',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

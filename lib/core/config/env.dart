@@ -154,7 +154,7 @@ class AppEnv {
   );
 
   // ── Brand ─────────────────────────────────────────────────────────────
-  static const String brandName = 'ShipNow';
+  static const String brandName = 'AirPak Express';
   static const String brandTagline = 'AirPak Express';
   static const String supportEmail = 'support@airpak-express.com';
   static const String supportPhone = '+60 3-7875 7768';

@@ -72,8 +72,6 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
       child: Row(
         children: [
-          const BrandMark(size: 44),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -621,7 +619,7 @@ class _Stats extends StatelessWidget {
                       color: Colors.white, size: 18),
                 ),
                 const SizedBox(width: 10),
-                const Text('Why ShipNow',
+                const Text('Why AirPak',
                     style: TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -829,11 +827,7 @@ class _Footer extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('ShipNow',
-                        style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: context.textColor)),
+                    AirpakWordmark(size: 18, showUnderline: false),
                     Text('support@airpak-express.com',
                         style: TextStyle(
                             color: context.textMutedColor, fontSize: 12)),

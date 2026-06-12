@@ -1,15 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "build/web/**",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    { "src": "/(.*\\.(?:js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|otf|json|ico))", "dest": "/build/web/$1" },
-    { "src": "/(.*)", "dest": "/build/web/index.html" }
-  ],
+  "buildCommand": "curl -fsSL https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.27.1-stable.tar.xz -o /tmp/flutter.tar.xz && tar xf /tmp/flutter.tar.xz -C /opt/ && rm /tmp/flutter.tar.xz && export PATH=$PATH:/opt/flutter/bin && /opt/flutter/bin/flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL",
+  "outputDirectory": "build/web",
+  "installCommand": "echo 'no install needed'",
+  "framework": null,
   "cleanUrls": false,
   "trailingSlash": false,
   "headers": [
@@ -27,5 +21,8 @@
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
+  ],
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -106,7 +106,49 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                           }
                         },
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
+                      // Quick skip — sign in as guest (demo) for
+                      // instant portal access. Made more visible.
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () async {
+                            await ref
+                                .read(authControllerProvider.notifier)
+                                .signIn('demo@airpak-express.com', 'demo1234');
+                            if (context.mounted) {
+                              context.go(AppRoutes.portalDashboard);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: context.surfaceColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: context.borderColor),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.flash_on_rounded,
+                                    size: 16, color: AppColors.brand),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Continue as guest (demo)',
+                                  style: GoogleFonts.inter(
+                                    color: AppColors.brand,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
                       GestureDetector(
                         onTap: () => context.push(AppRoutes.login),
                         child: Text(
@@ -114,20 +156,6 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                           style: GoogleFonts.inter(
                             color: context.textMutedColor,
                             fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // Quick skip — sign in as guest (demo) for
-                      // instant portal access.
-                      GestureDetector(
-                        onTap: () => context.go(AppRoutes.portalDashboard),
-                        child: Text(
-                          'Continue as guest',
-                          style: GoogleFonts.inter(
-                            color: context.textSubtleColor,
-                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
