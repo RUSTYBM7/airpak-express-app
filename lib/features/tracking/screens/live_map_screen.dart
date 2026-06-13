@@ -74,7 +74,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // ── The synthetic dark map ─────────────────────────────
+          // ── The synthetic dark map — fills the entire screen ─────
           Positioned.fill(
             child: InteractiveViewer(
               minScale: 1.0,
@@ -90,7 +90,7 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
               ),
             ),
           ),
-          // Subtle vignette so the dashboard cards stand out.
+          // Very light vignette (no more heavy dark overlay)
           Positioned.fill(
             child: IgnorePointer(
               child: DecoratedBox(
@@ -99,11 +99,11 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withValues(alpha: 0.20),
+                      Colors.black.withValues(alpha: 0.15),
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.45),
+                      Colors.black.withValues(alpha: 0.22),
                     ],
-                    stops: const [0.0, 0.35, 1.0],
+                    stops: const [0.0, 0.45, 1.0],
                   ),
                 ),
               ),
@@ -212,11 +212,12 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
           ),
           // ── Live data dashboard cards ──────────────────────────
           if (_showDashboard)
+            // Compact horizontal stats bar — way less obtrusive.
             Positioned(
               left: 12,
               right: 72,
-              top: MediaQuery.of(context).padding.top + 110,
-              child: _LiveDashboard(tracking: widget.tracking),
+              top: MediaQuery.of(context).padding.top + 102,
+              child: _CompactStatsBar(),
             ),
           // ── Bottom shipment sheet ──────────────────────────────
           Positioned(
@@ -818,6 +819,101 @@ class _LiveStatusPill extends StatelessWidget {
   }
 }
 
+class _CompactStatsBar extends StatelessWidget {
+  const _CompactStatsBar();
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+          child: Row(
+            children: const [
+              _StatPill(label: 'ETA', value: '5:42', color: Color(0xFFFFD60A)),
+              _StatDivider(),
+              _StatPill(label: 'DIST', value: '12.4km', color: Color(0xFF0A84FF)),
+              _StatDivider(),
+              _StatPill(label: 'SPEED', value: '38km/h', color: Color(0xFF30D158)),
+              _StatDivider(),
+              _StatPill(label: 'BAT', value: '87%', color: Color(0xFF30D158)),
+              _StatDivider(),
+              _StatPill(label: 'ALT', value: '42m', color: AppColors.brand),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatDivider extends StatelessWidget {
+  const _StatDivider();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 28,
+      color: Colors.white.withValues(alpha: 0.12),
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _StatPill({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 8.5,
+                  letterSpacing: 0.4,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 1),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                    color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 4),
+              Text(value,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LiveDashboard extends StatelessWidget {
   final String tracking;
   const _LiveDashboard({required this.tracking});
@@ -985,114 +1081,140 @@ class _DashboardCell extends StatelessWidget {
   }
 }
 
-class _BottomShipmentSheet extends StatelessWidget {
+class _BottomShipmentSheet extends StatefulWidget {
   final String tracking;
   const _BottomShipmentSheet({required this.tracking});
   @override
+  State<_BottomShipmentSheet> createState() => _BottomShipmentSheetState();
+}
+
+class _BottomShipmentSheetState extends State<_BottomShipmentSheet> {
+  bool _expanded = false;
+  @override
   Widget build(BuildContext context) {
-    return Container(
+    final t = widget.tracking;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
             Colors.black.withValues(alpha: 0.0),
-            Colors.black.withValues(alpha: 0.85),
-            const Color(0xFF0A0A0C),
+            Colors.black.withValues(alpha: _expanded ? 0.92 : 0.78),
           ],
-          stops: const [0.0, 0.15, 0.5],
+          stops: const [0.0, 0.18],
         ),
       ),
       padding: EdgeInsets.fromLTRB(
-          0, 18, 0, MediaQuery.of(context).padding.bottom + 16),
+          0, 12, 0, MediaQuery.of(context).padding.bottom + 8),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 14),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(_expanded ? 16 : 12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: Colors.white.withValues(alpha: _expanded ? 0.08 : 0.07),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+            // Tap-to-expand header
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Column(
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  Row(
                     children: [
-                      Text('Shipment ${tracking.substring(0, 12)}…',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3)),
-                      const SizedBox(height: 2),
-                      const Text('Petaling Jaya · 6.2 km from you',
-                          style: TextStyle(
-                              color: Colors.white70, fontSize: 12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Shipment ${t.substring(0, 12)}…',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.3)),
+                            const SizedBox(height: 2),
+                            const Text('Petaling Jaya · 6.2 km from you',
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 11.5)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: const Text('On time',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 6),
+                      AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 220),
+                        child: Icon(Icons.expand_more_rounded,
+                            color: Colors.white60, size: 18),
+                      ),
                     ],
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.20),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: const Text('On time',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800)),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 14),
-            const _MiniTimeline(),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _SheetAction(
-                    icon: Icons.phone_rounded,
-                    label: 'Call driver',
-                    onTap: () {},
+            if (_expanded) ...[
+              const SizedBox(height: 14),
+              const _MiniTimeline(),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SheetAction(
+                      icon: Icons.phone_rounded,
+                      label: 'Call driver',
+                      onTap: () {},
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _SheetAction(
-                    icon: Icons.notifications_active_rounded,
-                    label: 'Notify me',
-                    onTap: () {},
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _SheetAction(
+                      icon: Icons.notifications_active_rounded,
+                      label: 'Notify me',
+                      onTap: () {},
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _SheetAction(
-                    icon: Icons.share_rounded,
-                    label: 'Share',
-                    onTap: () {},
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _SheetAction(
+                      icon: Icons.share_rounded,
+                      label: 'Share',
+                      onTap: () {},
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

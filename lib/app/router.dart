@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/admin/screens/admin_2fa_screen.dart';
+import '../features/admin/screens/admin_ai_studio_screen.dart';
+import '../features/admin/screens/admin_audit_logs_screen.dart';
+import '../features/admin/screens/admin_automation_screen.dart';
 import '../features/admin/screens/admin_chat_screen.dart';
 import '../features/admin/screens/admin_dashboard_screen.dart';
+import '../features/admin/screens/admin_document_parser_screen.dart';
 import '../features/admin/screens/admin_forgot_password_screen.dart';
 import '../features/admin/screens/admin_layout.dart';
 import '../features/admin/screens/admin_login_screen.dart';
@@ -12,6 +16,7 @@ import '../features/admin/screens/admin_reset_password_screen.dart';
 import '../features/admin/screens/admin_settings_screen.dart';
 import '../features/admin/screens/admin_shipment_create_screen.dart';
 import '../features/admin/screens/admin_users_screen.dart';
+import '../features/admin/screens/admin_voice_tools_screen.dart';
 import '../features/auth/providers/auth_controller.dart';
 import '../features/auth/screens/biometric_setup_screen.dart';
 import '../features/auth/screens/forgot_password_screen.dart';
@@ -74,6 +79,13 @@ class AppRoutes {
   static const adminCreate = '/admin/portal/create';
   static const adminChat = '/admin/portal/chat';
   static const adminSettings = '/admin/portal/settings';
+  static const adminAiStudio = '/admin/portal/ai-studio';
+  static const adminAutomation = '/admin/portal/automation';
+  static const adminDocParser = '/admin/portal/document-parser';
+  static const adminVoiceTools = '/admin/portal/voice-tools';
+  static const adminAuditLogs = '/admin/portal/audit-logs';
+  static const adminWorkflows = '/admin/portal/workflows';
+  static const adminAutopilot = '/admin/portal/autopilot';
 }
 
 GoRouter buildRouter(Ref ref) {
@@ -253,6 +265,21 @@ GoRouter buildRouter(Ref ref) {
           GoRoute(
               path: AppRoutes.adminSettings,
               builder: (_, __) => const AdminSettingsScreen()),
+          GoRoute(
+              path: AppRoutes.adminAiStudio,
+              builder: (_, __) => const AdminAiStudioScreen()),
+          GoRoute(
+              path: AppRoutes.adminAutomation,
+              builder: (_, __) => const AdminAutomationScreen()),
+          GoRoute(
+              path: AppRoutes.adminDocParser,
+              builder: (_, __) => const AdminDocumentParserScreen()),
+          GoRoute(
+              path: AppRoutes.adminVoiceTools,
+              builder: (_, __) => const AdminVoiceToolsScreen()),
+          GoRoute(
+              path: AppRoutes.adminAuditLogs,
+              builder: (_, __) => const AdminAuditLogsScreen()),
         ],
       ),
       GoRoute(

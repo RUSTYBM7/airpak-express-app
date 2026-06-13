@@ -11,11 +11,53 @@ class AdminLayout extends ConsumerWidget {
   final Widget child;
   const AdminLayout({super.key, required this.child});
 
+  static const _tabs = [
+    (AppRoutes.adminPortal, Icons.dashboard_outlined, Icons.dashboard, 'Home'),
+    (AppRoutes.adminUsers, Icons.people_outline, Icons.people, 'Users'),
+    (AppRoutes.adminChat, Icons.chat_bubble_outline, Icons.chat_bubble, 'Inbox'),
+    (
+      AppRoutes.adminAiStudio,
+      Icons.auto_awesome_outlined,
+      Icons.auto_awesome,
+      'AI'
+    ),
+    (
+      AppRoutes.adminAutomation,
+      Icons.auto_mode_outlined,
+      Icons.auto_mode,
+      'Rules'
+    ),
+    (
+      AppRoutes.adminDocParser,
+      Icons.description_outlined,
+      Icons.description,
+      'Docs'
+    ),
+    (
+      AppRoutes.adminVoiceTools,
+      Icons.record_voice_over_outlined,
+      Icons.record_voice_over,
+      'Voice'
+    ),
+    (
+      AppRoutes.adminAuditLogs,
+      Icons.fact_check_outlined,
+      Icons.fact_check,
+      'Audit'
+    ),
+    (
+      AppRoutes.adminSettings,
+      Icons.settings_outlined,
+      Icons.settings,
+      'Settings'
+    ),
+  ];
+
   int _indexFor(String location) {
-    if (location == AppRoutes.adminPortal) return 0;
-    if (location.startsWith(AppRoutes.adminUsers)) return 1;
-    if (location.startsWith(AppRoutes.adminChat)) return 2;
-    if (location.startsWith(AppRoutes.adminSettings)) return 3;
+    for (var i = 0; i < _tabs.length; i++) {
+      if (location == _tabs[i].$1) return i;
+      if (location.startsWith(_tabs[i].$1 + '/')) return i;
+    }
     return 0;
   }
 
@@ -25,6 +67,7 @@ class AdminLayout extends ConsumerWidget {
     final index = _indexFor(loc);
     final isHome = loc == AppRoutes.adminPortal;
     return Scaffold(
+      backgroundColor: context.bgColor,
       appBar: AppBar(
         title: Row(
           children: [
@@ -68,47 +111,10 @@ class AdminLayout extends ConsumerWidget {
       ),
       body: Row(
         children: [
-          NavigationRail(
-            selectedIndex: index,
-            onDestinationSelected: (i) {
-              switch (i) {
-                case 0:
-                  context.go(AppRoutes.adminPortal);
-                  break;
-                case 1:
-                  context.go(AppRoutes.adminUsers);
-                  break;
-                case 2:
-                  context.go(AppRoutes.adminChat);
-                  break;
-                case 3:
-                  context.go(AppRoutes.adminSettings);
-                  break;
-              }
-            },
-            labelType: NavigationRailLabelType.all,
-            backgroundColor: AppColors.surface,
-            selectedIconTheme: const IconThemeData(color: AppColors.brand),
-            unselectedIconTheme:
-                IconThemeData(color: context.textMutedColor),
-            destinations: const [
-              NavigationRailDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard),
-                  label: Text('Home')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.people_outline),
-                  selectedIcon: Icon(Icons.people),
-                  label: Text('Users')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.chat_bubble_outline),
-                  selectedIcon: Icon(Icons.chat_bubble),
-                  label: Text('Inbox')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings),
-                  label: Text('Settings')),
-            ],
+          _SideNav(
+            tabs: _tabs,
+            index: index,
+            onTap: (i) => context.go(_tabs[i].$1),
           ),
           const VerticalDivider(width: 1, color: AppColors.border),
           Expanded(child: child),
@@ -123,6 +129,70 @@ class AdminLayout extends ConsumerWidget {
               label: const Text('New shipment'),
             )
           : null,
+    );
+  }
+}
+
+class _SideNav extends StatelessWidget {
+  final List<(String, IconData, IconData, String)> tabs;
+  final int index;
+  final ValueChanged<int> onTap;
+  const _SideNav(
+      {required this.tabs, required this.index, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      color: AppColors.surface,
+      child: SafeArea(
+        right: false,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          children: [
+            for (var i = 0; i < tabs.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => onTap(i),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: index == i
+                            ? AppColors.brandLight
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                              index == i ? tabs[i].$3 : tabs[i].$2,
+                              color: index == i
+                                  ? AppColors.brand
+                                  : context.textMutedColor,
+                              size: 18),
+                          const SizedBox(width: 10),
+                          Text(tabs[i].$4,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: index == i
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                  color: index == i
+                                      ? AppColors.brand
+                                      : context.textColor)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

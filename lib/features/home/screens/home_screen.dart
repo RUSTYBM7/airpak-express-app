@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../app/cupertino.dart';
 import '../../../app/design_system.dart';
 import '../../../app/router.dart';
 import '../../../core/models/carrier.dart';
@@ -944,7 +945,7 @@ class _MenuSheet extends StatelessWidget {
   }
 }
 
-// ── Carrier strip — worldwide carriers with motion ─────────────────
+// ── Carrier strip — worldwide carriers with full-display cards ──────
 class _CarrierStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -954,7 +955,7 @@ class _CarrierStrip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             child: Row(
               children: [
                 const SectionHeader('We ship with', padding: EdgeInsets.zero),
@@ -970,21 +971,23 @@ class _CarrierStrip extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 110,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-              itemCount: kWorldwideCarriers.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, i) {
-                final c = kWorldwideCarriers[i];
-                return _CarrierTile(
-                  carrier: c,
-                  index: i,
-                );
-              },
+          // Full-display 2-col grid: big logo, name, rating, ETA.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1.55,
+              children: [
+                for (var i = 0; i < kWorldwideCarriers.length; i++)
+                  _CarrierFullCard(
+                    carrier: kWorldwideCarriers[i],
+                    index: i,
+                  ),
+              ],
             ),
           ),
         ],
@@ -1058,6 +1061,162 @@ class _CarrierTileState extends State<_CarrierTile> {
                     fontSize: 9.5,
                     color: context.textMutedColor,
                     fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Full-display carrier card — big logo, name, rating, ETA ──────────
+
+class _CarrierFullCard extends StatefulWidget {
+  final Carrier carrier;
+  final int index;
+  const _CarrierFullCard({required this.carrier, required this.index});
+  @override
+  State<_CarrierFullCard> createState() => _CarrierFullCardState();
+}
+
+class _CarrierFullCardState extends State<_CarrierFullCard> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.carrier;
+    return PressScale(
+      onTap: () {
+        HapticService.selection();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  width: 22, height: 22,
+                  decoration: BoxDecoration(
+                    color: c.brandColor,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.check, color: Colors.white, size: 14),
+                ),
+                const SizedBox(width: 10),
+                Text('Selected carrier: ${c.name}'),
+              ],
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: context.textColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: AnimatedContainer(
+          duration: MotionDurations.short,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: context.surfaceColor,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: _hover ? c.brandColor.withValues(alpha: 0.6) : context.borderColor,
+              width: _hover ? 1.5 : 1,
+            ),
+            boxShadow: _hover ? [
+              BoxShadow(
+                color: c.brandColor.withValues(alpha: 0.20),
+                blurRadius: 16,
+                spreadRadius: 0,
+                offset: const Offset(0, 4),
+              ),
+            ] : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Big logo takes up the top half
+                  Container(
+                    width: 64, height: 48,
+                    alignment: Alignment.center,
+                    child: CarrierLogo(
+                      carrier: c,
+                      size: 60,
+                      borderRadius: BorderRadius.circular(8),
+                      selected: _hover,
+                      backgroundColor: Colors.transparent,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: c.brandColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.star_rounded, color: c.brandColor, size: 11),
+                        const SizedBox(width: 2),
+                        Text(c.rating.toStringAsFixed(1),
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: c.brandColor)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(c.name,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                          color: context.textColor)),
+                  const SizedBox(height: 2),
+                  Text(c.tagline,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          color: context.textMutedColor,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.schedule_rounded, color: AppColors.success, size: 10),
+                            const SizedBox(width: 3),
+                            Text(c.eta,
+                                style: const TextStyle(
+                                    fontSize: 9.5,
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w800)),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(c.flag, style: const TextStyle(fontSize: 16)),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
