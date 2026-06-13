@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../app/cupertino.dart';
 import '../../../app/design_system.dart';
 import '../../../core/widgets/airpak_brand.dart';
 import '../../../app/router.dart';
@@ -31,57 +33,93 @@ class PortalDashboardScreen extends ConsumerWidget {
     final async = ref.watch(_myShipmentsProvider);
     return Scaffold(
       backgroundColor: context.bgColor,
-      appBar: AppBar(
-        title: const Row(
-          children: [
-            BrandMark(size: 32),
-            SizedBox(width: 8),
-            AirpakWordmark(size: 18, showUnderline: false, showR: false),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () => _showNotifications(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.support_agent_rounded),
-            onPressed: () => context.push(AppRoutes.portalSupport),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: async.when(
-          loading: () => Center(
-              child: CircularProgressIndicator(color: AppColors.brand)),
-          error: (e, _) => ErrorStateView(error: e),
-          data: (res) {
-            final shipments = res.data ?? [];
-            return RefreshIndicator(
-              color: AppColors.brand,
-              onRefresh: () async => ref.invalidate(_myShipmentsProvider),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                children: [
-                  _GreetingCard(
-                    name: auth.profile?.displayName ?? 'there',
-                    shipments: shipments,
+      body: async.when(
+        loading: () => Center(
+            child: CircularProgressIndicator(color: AppColors.brand)),
+        error: (e, _) => ErrorStateView(error: e),
+        data: (res) {
+          final shipments = res.data ?? [];
+          return CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics()),
+            slivers: [
+              IosLargeNavBar(
+                title: 'Home',
+                expandedHeight: 96,
+                actions: [
+                  CupertinoButton(
+                    minSize: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    onPressed: () {
+                      HapticService.light();
+                      _showNotifications(context);
+                    },
+                    child: Icon(CupertinoIcons.bell,
+                        color: AppColors.brand, size: 22),
                   ),
-                  const SizedBox(height: 18),
-                  _QuickActions(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const SectionHeader('Recent shipments', padding: EdgeInsets.zero),
-                      TextButton(
-                        onPressed: () =>
-                            context.go(AppRoutes.portalShipments),
-                        child: Text('See all',
-                            style: TextStyle(
-                                color: AppColors.brand,
-                                fontWeight: FontWeight.w700)),
+                  CupertinoButton(
+                    minSize: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    onPressed: () {
+                      HapticService.light();
+                      context.push(AppRoutes.portalSupport);
+                    },
+                    child: Icon(CupertinoIcons.chat_bubble_2,
+                        color: AppColors.brand, size: 22),
+                  ),
+                ],
+              ),
+              CupertinoSliverRefreshControl(
+                onRefresh: () async {
+                  HapticService.medium();
+                  await ref.refresh(_myShipmentsProvider.future);
+                },
+                builder: (context, mode, pulledExtent, triggerDist, indicatorExtent) {
+                  final p = (pulledExtent / triggerDist).clamp(0.0, 1.0);
+                  return Container(
+                    alignment: Alignment.center,
+                    height: indicatorExtent,
+                    child: Transform.scale(
+                      scale: 0.6 + 0.4 * p,
+                      child: Opacity(
+                        opacity: p,
+                        child: Container(
+                          width: 28, height: 28,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: AppColors.brandGradient,
+                          ),
+                          child: const Icon(CupertinoIcons.arrow_down,
+                              color: Colors.white, size: 16),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _GreetingCard(
+                      name: auth.profile?.displayName ?? 'there',
+                      shipments: shipments,
+                    ),
+                    const SizedBox(height: 18),
+                    _QuickActions(),
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const SectionHeader('Recent shipments',
+                            padding: EdgeInsets.zero),
+                        TextButton(
+                          onPressed: () =>
+                              context.go(AppRoutes.portalShipments),
+                          child: Text('See all',
+                              style: TextStyle(
+                                  color: AppColors.brand,
+                                  fontWeight: FontWeight.w700)),
                       ),
                     ],
                   ),
@@ -143,18 +181,21 @@ class PortalDashboardScreen extends ConsumerWidget {
                         ),
                       ),
                     ],
-                  ),
-                ],
+                  )]),
+                ),
               ),
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.brand,
         foregroundColor: Colors.white,
         elevation: 0,
-        onPressed: () => context.push(AppRoutes.portalCreate),
+        onPressed: () {
+          HapticService.medium();
+          context.push(AppRoutes.portalCreate);
+        },
         icon: const Icon(Icons.add_rounded),
         label: const Text('New shipment',
             style: TextStyle(fontWeight: FontWeight.w700)),

@@ -20,15 +20,16 @@ class AppColors {
 
   // ── Surfaces (light) ───────────────────────────────────────────────
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceMuted = Color(0xFFFAFAFB);
-  static const Color background = Color(0xFFF7F7F9);
+  static const Color surfaceMuted = Color(0xFFF2F2F7); // iOS grouped bg
+  static const Color background = Color(0xFFF2F2F7);
   static const Color overlay = Color(0xFF0F172A);
 
-  // ── Surfaces (dark) ────────────────────────────────────────────────
+  // ── Surfaces (dark) — iOS HIG dark system colors ─────────────────
+  // System background (pure black for OLED) → grouped bg → elevated card
   static const Color darkBackground = Color(0xFF000000);
-  static const Color darkSurface = Color(0xFF111114);
-  static const Color darkSurfaceMuted = Color(0xFF1C1C1F);
-  static const Color darkSurfaceElevated = Color(0xFF2C2C2E);
+  static const Color darkSurface = Color(0xFF1C1C1E);      // iOS secondary
+  static const Color darkSurfaceMuted = Color(0xFF2C2C2E); // iOS tertiary
+  static const Color darkSurfaceElevated = Color(0xFF3A3A3C); // iOS quaternary
   static const Color darkOverlay = Color(0xFF000000);
 
   // ── Text (light) ────────────────────────────────────────────────────

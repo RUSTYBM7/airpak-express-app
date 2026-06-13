@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/cupertino.dart';
 import '../../../app/design_system.dart';
 import '../../../app/ios_components.dart';
 import '../../../app/router.dart';
@@ -30,7 +31,7 @@ class SettingsScreen extends ConsumerWidget {
         bottom: false,
         child: CustomScrollView(
           slivers: [
-            const LargeNavBar(
+            const IosLargeNavBar(
               title: 'Settings',
               actions: [
                 Padding(
