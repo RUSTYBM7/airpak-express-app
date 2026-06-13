@@ -208,12 +208,13 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<bool> verify2FA(String code) async {
-    if (code == '000000' || code.length != 6) {
-      state = state.copyWith(error: 'Invalid 2FA code (use 000000 in demo)');
-      return false;
+    // Demo: accept 000000 as the 2FA code; reject anything else.
+    if (code == '000000' && code.length == 6) {
+      state = state.copyWith(clearError: true);
+      return true;
     }
-    state = state.copyWith(clearError: true);
-    return true;
+    state = state.copyWith(error: 'Invalid 2FA code (use 000000 in demo)');
+    return false;
   }
 
   Future<void> sendPasswordReset(String email) async {
