@@ -16,6 +16,7 @@ import '../features/admin/screens/admin_reset_password_screen.dart';
 import '../features/admin/screens/admin_settings_screen.dart';
 import '../features/admin/screens/admin_shipment_create_screen.dart';
 import '../features/admin/screens/admin_users_screen.dart';
+import '../features/admin/screens/admin_user_detail_screen.dart';
 import '../features/admin/screens/admin_voice_tools_screen.dart';
 import '../features/auth/providers/auth_controller.dart';
 import '../features/auth/screens/biometric_setup_screen.dart';
@@ -30,6 +31,7 @@ import '../features/home/screens/home_screen.dart';
 import '../features/onboarding/screens/enterprise_onboarding_screen.dart';
 import '../features/portal/screens/create_shipment_screen.dart';
 import '../features/portal/screens/payments_screen.dart';
+import '../features/payments/screens/crypto_deposit_screen.dart';
 import '../features/portal/screens/portal_dashboard_screen.dart';
 import '../features/portal/screens/portal_layout.dart';
 import '../features/portal/screens/profile_screen.dart';
@@ -168,6 +170,13 @@ GoRouter buildRouter(Ref ref) {
         },
       ),
       GoRoute(
+        path: '/portal/track/:tracking',
+        builder: (_, st) {
+          final t = st.pathParameters['tracking'] ?? 'APK2026052600003';
+          return LiveMapScreen(tracking: t);
+        },
+      ),
+      GoRoute(
         path: AppRoutes.login,
         builder: (_, __) => const LoginScreen(),
       ),
@@ -285,6 +294,16 @@ GoRouter buildRouter(Ref ref) {
       GoRoute(
         path: AppRoutes.adminCreate,
         builder: (_, __) => const AdminShipmentCreateScreen(),
+      ),
+      GoRoute(
+        path: '/admin/portal/user/:userId',
+        builder: (_, st) => AdminUserDetailScreen(
+          userId: st.pathParameters['userId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/portal/crypto-deposit',
+        builder: (_, __) => const CryptoDepositScreen(),
       ),
     ],
   );

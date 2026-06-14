@@ -11,6 +11,39 @@ UserRole roleFromString(String? raw) {
   }
 }
 
+/// Account status — controlled by admin.
+/// Defaults to [active] for new accounts.
+enum AccountStatus { active, verified, pending, blocked, suspended }
+
+AccountStatus accountStatusFromString(String? raw) {
+  switch (raw?.toLowerCase()) {
+    case 'verified':
+      return AccountStatus.verified;
+    case 'pending':
+      return AccountStatus.pending;
+    case 'blocked':
+      return AccountStatus.blocked;
+    case 'suspended':
+      return AccountStatus.suspended;
+    default:
+      return AccountStatus.active;
+  }
+}
+
+/// KYC verification level.
+enum KycLevel { none, basic, full }
+
+KycLevel kycLevelFromString(String? raw) {
+  switch (raw?.toLowerCase()) {
+    case 'basic':
+      return KycLevel.basic;
+    case 'full':
+      return KycLevel.full;
+    default:
+      return KycLevel.none;
+  }
+}
+
 class AppProfile {
   final String id;
   final String email;
@@ -23,6 +56,13 @@ class AppProfile {
   final String companyName;
   final String? defaultAddressId;
   final bool twoFactorEnabled;
+  final AccountStatus accountStatus;
+  final KycLevel kycLevel;
+  final String riskLevel; // low, medium, high
+  final DateTime? lastLoginAt;
+  final DateTime? joinedAt;
+  final List<String> tags;
+  final String? notes;
 
   const AppProfile({
     required this.id,
@@ -36,6 +76,13 @@ class AppProfile {
     this.companyName = '',
     this.defaultAddressId,
     this.twoFactorEnabled = false,
+    this.accountStatus = AccountStatus.active,
+    this.kycLevel = KycLevel.none,
+    this.riskLevel = 'low',
+    this.lastLoginAt,
+    this.joinedAt,
+    this.tags = const [],
+    this.notes,
   });
 
   factory AppProfile.fromMap(Map<String, dynamic> m) => AppProfile(
@@ -50,6 +97,13 @@ class AppProfile {
         companyName: m['company_name']?.toString() ?? '',
         defaultAddressId: m['default_address_id']?.toString(),
         twoFactorEnabled: m['two_factor_enabled'] as bool? ?? false,
+        accountStatus: accountStatusFromString(m['account_status']?.toString()),
+        kycLevel: kycLevelFromString(m['kyc_level']?.toString()),
+        riskLevel: m['risk_level']?.toString() ?? 'low',
+        lastLoginAt: DateTime.tryParse(m['last_login_at']?.toString() ?? ''),
+        joinedAt: DateTime.tryParse(m['joined_at']?.toString() ?? ''),
+        tags: (m['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        notes: m['notes']?.toString(),
       );
 
   String get displayName =>
@@ -67,6 +121,13 @@ class AppProfile {
         'company_name': companyName,
         'default_address_id': defaultAddressId,
         'two_factor_enabled': twoFactorEnabled,
+        'account_status': accountStatus.name,
+        'kyc_level': kycLevel.name,
+        'risk_level': riskLevel,
+        'last_login_at': lastLoginAt?.toIso8601String(),
+        'joined_at': joinedAt?.toIso8601String(),
+        'tags': tags,
+        'notes': notes,
       };
 
   AppProfile copyWith({
@@ -78,6 +139,13 @@ class AppProfile {
     String? companyName,
     String? defaultAddressId,
     bool? twoFactorEnabled,
+    AccountStatus? accountStatus,
+    KycLevel? kycLevel,
+    String? riskLevel,
+    DateTime? lastLoginAt,
+    DateTime? joinedAt,
+    List<String>? tags,
+    String? notes,
   }) =>
       AppProfile(
         id: id,
@@ -91,5 +159,12 @@ class AppProfile {
         companyName: companyName ?? this.companyName,
         defaultAddressId: defaultAddressId ?? this.defaultAddressId,
         twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
+        accountStatus: accountStatus ?? this.accountStatus,
+        kycLevel: kycLevel ?? this.kycLevel,
+        riskLevel: riskLevel ?? this.riskLevel,
+        lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+        joinedAt: joinedAt ?? this.joinedAt,
+        tags: tags ?? this.tags,
+        notes: notes ?? this.notes,
       );
 }

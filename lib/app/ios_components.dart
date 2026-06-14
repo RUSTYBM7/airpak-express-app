@@ -185,6 +185,7 @@ enum IosTrailing {
   chevron,
   switch_,
   checkmark,
+  check,
   custom,
   none,
 }
@@ -201,6 +202,7 @@ class IosRow extends StatelessWidget {
   final Color? valueColor;
   final String? value;
   final bool destructive;
+  final Widget? leading;
   const IosRow({
     super.key,
     this.icon,
@@ -213,6 +215,7 @@ class IosRow extends StatelessWidget {
     this.value,
     this.valueColor,
     this.destructive = false,
+    this.leading,
   });
 
   @override
@@ -226,6 +229,10 @@ class IosRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: 12),
+              ],
               if (icon != null) ...[
                 Container(
                   width: 28,
@@ -294,6 +301,9 @@ class IosRow extends StatelessWidget {
       case IosTrailing.switch_:
         return const _FakeSwitch();
       case IosTrailing.checkmark:
+        return const Icon(Icons.check_rounded,
+            color: AppColors.brand, size: 18);
+      case IosTrailing.check:
         return const Icon(Icons.check_rounded,
             color: AppColors.brand, size: 18);
       case IosTrailing.custom:
@@ -453,6 +463,9 @@ class IosTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
   final TextCapitalization textCapitalization;
+  final bool autofocus;
+  final int? maxLines;
+  final int? minLines;
   const IosTextField({
     super.key,
     required this.controller,
@@ -464,6 +477,9 @@ class IosTextField extends StatelessWidget {
     this.validator,
     this.onChanged,
     this.textCapitalization = TextCapitalization.none,
+    this.autofocus = false,
+    this.maxLines = 1,
+    this.minLines,
   });
 
   @override
@@ -475,6 +491,9 @@ class IosTextField extends StatelessWidget {
       onChanged: onChanged,
       textCapitalization: textCapitalization,
       validator: validator,
+      autofocus: autofocus,
+      maxLines: obscure ? 1 : maxLines,
+      minLines: minLines,
       style: TextStyle(fontSize: 16, color: context.textColor),
       decoration: InputDecoration(
         labelText: label,
@@ -556,6 +575,7 @@ Future<T?> showIosSheet<T>({
   double initialChildSize = 0.6,
   double minChildSize = 0.2,
   double maxChildSize = 0.95,
+  String? title,
 }) {
   return showModalBottomSheet<T>(
     context: context,
@@ -589,6 +609,10 @@ Future<T?> showIosSheet<T>({
                     ),
                   ),
                 ),
+                if (title != null) ...[
+                  Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.text)),
+                  const SizedBox(height: 14),
+                ],
                 child,
               ],
             ),

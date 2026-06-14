@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/design_system.dart';
 import '../../../app/ios_components.dart';
@@ -153,7 +154,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                                               fontSize: 11)),
                                     ],
                                   ),
-                                  onTap: () => _showUser(context, u),
+                                  onTap: () => context.push('/admin/portal/user/${u.id}'),
                                 ))
                             .toList(),
                       );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/design_system.dart';
@@ -685,6 +686,30 @@ class _BuyView extends StatelessWidget {
               fontSize: 11.5,
               color: context.textMutedColor,
               height: 1.45),
+        ),
+        const SizedBox(height: 18),
+        // Crypto deposit + Contact admin — alternatives
+        IosSection(
+          header: 'Other ways to fund',
+          margin: EdgeInsets.zero,
+          rows: [
+            IosRow(
+              icon: Icons.currency_bitcoin_rounded,
+              iconColor: const Color(0xFFF7931A),
+              label: 'Crypto deposit',
+              sublabel: 'BTC · ETH · USDC · USDT · APC',
+              trailing: IosTrailing.chevron,
+              onTap: () => context.push('/portal/crypto-deposit'),
+            ),
+            IosRow(
+              icon: Icons.support_agent_rounded,
+              iconColor: AppColors.warning,
+              label: 'Contact admin for other payment',
+              sublabel: 'Bank transfer, SWIFT, PayPal, WeChat Pay, local rails',
+              trailing: IosTrailing.chevron,
+              onTap: () => context.push('/portal/support'),
+            ),
+          ],
         ),
       ],
     );
