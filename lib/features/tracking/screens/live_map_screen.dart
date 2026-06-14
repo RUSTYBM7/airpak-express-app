@@ -125,12 +125,13 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen>
 
   // Convert a (lng, lat) to a normalized canvas coordinate
   Offset _toCanvas(Offset geo) {
+    final size = MediaQuery.of(context).size;
     final lng = geo.dx;
     final lat = geo.dy;
     // Visible window: lng 95..115, lat -10..6
     final x = (lng - 95) / 20;
     final y = 1 - (lat + 10) / 16; // flip Y for canvas
-    return Offset(x * 1000, y * 800);
+    return Offset(x * size.width, y * size.height);
   }
 
   @override
@@ -153,16 +154,18 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen>
                   setState(() => _followCourier = false);
                 }
               },
-              child: SizedBox(
-                width: 1000,
-                height: 800,
-                child: CustomPaint(
-                  painter: _SnapMapPainter(
-                    progress: _simProgress,
-                    pulseTick: _pulseTick,
-                    toCanvas: _toCanvas,
-                    routeAt: _routeAt,
-                    isDark: true,
+              child: LayoutBuilder(
+                builder: (ctx, c) => SizedBox(
+                  width: c.maxWidth,
+                  height: c.maxHeight,
+                  child: CustomPaint(
+                    painter: _SnapMapPainter(
+                      progress: _simProgress,
+                      pulseTick: _pulseTick,
+                      toCanvas: _toCanvas,
+                      routeAt: _routeAt,
+                      isDark: true,
+                    ),
                   ),
                 ),
               ),
