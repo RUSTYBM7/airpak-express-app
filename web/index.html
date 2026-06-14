@@ -1,38 +1,103 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="description" content="AirPak Express — global logistics platform with real-time tracking across 220 destinations.">
+  <meta name="theme-color" content="#DC2626" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 
-  <!-- iOS meta tags & icons -->
+  <!-- PWA / iOS native install -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="shipnow">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AirPak Express">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="msapplication-tap-highlight" content="no">
+  <meta name="apple-itunes-app" content="app-id=000000000">
+
+  <!-- Splash screens for iOS -->
+  <link rel="apple-touch-startup-image" href="splash/iphone5_splash.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)">
+  <link rel="apple-touch-startup-image" href="splash/iphone6_splash.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+  <link rel="apple-touch-startup-image" href="splash/iphoneplus_splash.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image" href="splash/iphonex_splash.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image" href="splash/iphonexr_splash.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+  <link rel="apple-touch-startup-image" href="splash/iphonexsmax_splash.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image" href="splash/ipad_splash.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2)">
+  <link rel="apple-touch-startup-image" href="splash/ipadpro1_splash.png" media="(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio: 2)">
+  <link rel="apple-touch-startup-image" href="splash/ipadpro3_splash.png" media="(min-device-width: 834px) and (min-device-height: 1112px) and (-webkit-device-pixel-ratio: 2)">
+
+  <!-- Icons (multiple sizes) -->
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/Icon-512.png">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="57x57" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="72x72" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="76x76" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="114x114" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="144x144" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-512.png">
+  <link rel="mask-icon" href="icons/Icon-512.png" color="#DC2626">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>shipnow</title>
+  <!-- Manifest -->
   <link rel="manifest" href="manifest.json">
+
+  <!-- Apple-specific behaviors -->
+  <meta name="apple-mobile-web-app-orientations" content="portrait">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+
+  <!-- Preconnect to backend (when configured) -->
+  <link rel="preconnect" href="https://api.airpak-express.com" crossorigin>
+  <link rel="dns-prefetch" href="https://api.airpak-express.com">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="AirPak Express — Global Logistics">
+  <meta property="og:description" content="Real-time tracking across 220 destinations. Airpak Coin settlement, 14 partner carriers.">
+  <meta property="og:image" content="icons/Icon-512.png">
+  <meta property="og:type" content="website">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="app">
+  <meta name="twitter:title" content="AirPak Express">
+  <meta name="twitter:description" content="Global logistics platform with real-time tracking.">
+  <meta name="twitter:image" content="icons/Icon-512.png">
+
+  <title>AirPak Express</title>
+
+  <style>
+    html, body { background: #000; margin: 0; padding: 0; height: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
+    .app-loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #DC2626; z-index: 9999; transition: opacity 0.4s; }
+    .app-loader.hidden { opacity: 0; pointer-events: none; }
+    .app-loader .mark { width: 80px; height: 80px; background: #fff; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #DC2626; font-size: 44px; box-shadow: 0 12px 40px rgba(0,0,0,0.30); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+  </style>
 </head>
 <body>
+  <div id="app-loader" class="app-loader">
+    <div class="mark">A</div>
+  </div>
+  <script>
+    window.addEventListener('flutter-first-frame', function() {
+      var el = document.getElementById('app-loader');
+      if (el) { el.classList.add('hidden'); setTimeout(function() { el.remove(); }, 500); }
+    });
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js').catch(function() {});
+      });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

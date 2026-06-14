@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <!-- Web Clip payload: AirPak Fleet driver app -->
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.webClip.managed</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.airpak.fleet.webclip.driver</string>
+            <key>PayloadUUID</key>
+            <string>44AABBCC-DDEE-FF11-2233-445566778899</string>
+            <key>PayloadDisplayName</key>
+            <string>AirPak Fleet</string>
+            <key>Label</key>
+            <string>AirPak Fleet</string>
+            <key>URL</key>
+            <string>https://web-rust-ten-91.vercel.app/#/portal/track</string>
+            <key>IsRemovable</key>
+            <false/>
+        </dict>
+        <!-- Restrictions: stricter for fleet drivers -->
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.restrictions</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.airpak.fleet.restrictions.driver</string>
+            <key>PayloadUUID</key>
+            <string>55AABBCC-DDEE-FF11-2233-445566778899</string>
+            <key>PayloadDisplayName</key>
+            <string>AirPak Fleet Restrictions</string>
+            <key>allowCamera</key>
+            <true/>
+            <key>allowScreenShot</key>
+            <true/>
+            <key>allowUIAppInstallation</key>
+            <false/>
+            <key>allowInAppPurchases</key>
+            <false/>
+            <key>allowGameCenter</key>
+            <false/>
+            <key>allowAssistantWhileLocked</key>
+            <true/>
+        </dict>
+        <!-- VPN payload: optional Always-On VPN for AirPak routing -->
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.vpn.managed</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.airpak.fleet.vpn.driver</string>
+            <key>PayloadUUID</key>
+            <string>66AABBCC-DDEE-FF11-2233-445566778899</string>
+            <key>PayloadDisplayName</key>
+            <string>AirPak Routing VPN</string>
+            <key>UserDefinedName</key>
+            <string>AirPak Routing</string>
+            <key>VPNType</key>
+            <string>IKEv2</string>
+            <key>ServerAddress</key>
+            <string>vpn.airpak-express.com</string>
+            <key>RemoteIdentifier</key>
+            <string>vpn.airpak-express.com</string>
+            <key>OnDemandEnabled</key>
+            <integer>1</integer>
+            <key>OnDemandRules</key>
+            <array>
+                <dict>
+                    <key>Action</key>
+                    <string>Connect</string>
+                    <key>InterfaceTypeMatch</key>
+                    <string>WiFi</string>
+                </dict>
+            </array>
+        </dict>
+    </array>
+    <key>PayloadDisplayName</key>
+    <string>AirPak Express — Fleet Driver</string>
+    <key>PayloadDescription</key>
+    <string>Lockdown profile for AirPak fleet drivers: PWA install, routing VPN, and restrictions.</string>
+    <key>PayloadIdentifier</key>
+    <string>com.airpak.fleet.driver.profile</string>
+    <key>PayloadOrganization</key>
+    <string>AirPak Express Pte Ltd</string>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>77AABBCC-DDEE-FF11-2233-445566778899</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+    <key>PayloadRemovalDisallowed</key>
+    <true/>
+    <key>PayloadScope</key>
+    <string>System</string>
+    <key>ConsentText</key>
+    <dict>
+        <key>default</key>
+        <string>This is a managed device profile for AirPak Express fleet drivers. Removal is restricted. Contact fleet-ops@airpak-express.com for support.</string>
+    </dict>
+</dict>
+</plist>

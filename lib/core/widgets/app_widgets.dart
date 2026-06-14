@@ -403,12 +403,14 @@ class SectionHeader extends StatelessWidget {
   final String? action;
   final VoidCallback? onAction;
   final EdgeInsetsGeometry padding;
+  final Widget? trailing;
   const SectionHeader(
     this.text, {
     super.key,
     this.action,
     this.onAction,
     this.padding = const EdgeInsets.fromLTRB(0, 24, 0, 12),
+    this.trailing,
   });
 
   @override
@@ -436,6 +438,7 @@ class SectionHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (trailing != null) trailing!,
           if (action != null)
             TextButton(
               onPressed: onAction,

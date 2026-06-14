@@ -1,19 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../app/cupertino.dart';
 import '../../../app/design_system.dart';
 import '../../../app/ios_components.dart';
+import '../../../core/data/repositories.dart';
 import '../../../core/models/airpak_coin.dart';
+import '../../../core/models/shipment.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/motion.dart';
 import '../../auth/providers/auth_controller.dart';
 
-/// Airpak Coin payment dashboard — Coinbase / Trust Wallet feel, but
-/// with the explicit constraint of "Buy · Deposit · Pay" only.
-/// No withdrawal. No swaps. Brand-native settlement, 1:1 USD peg.
+/// AirPak Invoice screen — two big buttons.
+///
+/// 1. **Deposit** — fund the AirPak wallet with Airpak Coin (1:1 USD)
+///    or any supported crypto (BTC, ETH, USDC, USDT). The Airpak Coin
+///    "1:1 USD" rail is already live; the other rails open the existing
+///    crypto deposit screen with a full address + QR.
+///
+/// 2. **Invoice** — view, download, and pay any open invoice (per-shipment
+///    or one-off admin-issued). Existing balance, due dates, and statuses
+///    are shown inline.
 class PaymentsScreen extends ConsumerStatefulWidget {
   const PaymentsScreen({super.key});
   @override
@@ -21,39 +31,34 @@ class PaymentsScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
-  late FiatCurrency _currency;
-  int _tabIndex = 0; // 0 portfolio, 1 buy, 2 history
-
-  @override
-  void initState() {
-    super.initState();
-    _currency = kFiatCurrencies.first;
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
-    final apcBalance = auth.profile?.walletBalance ?? 0.0;
+    final balance = auth.profile?.walletBalance ?? 0.0;
+    final userId = auth.profile?.id;
+    final shipAsync = userId == null
+        ? const AsyncValue<RepoResult<List<Shipment>>>.data(RepoResult.ok([]))
+        : ref.watch(_shipmentsProvider(userId));
     return Scaffold(
       backgroundColor: context.bgColor,
       body: SafeArea(
-        bottom: false,
         child: CustomScrollView(
           slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              sliver: SliverToBoxAdapter(
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                 child: Row(
                   children: [
-                    const Text('Airpak Coin',
+                    Text('Invoice',
                         style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -1.0)),
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -1,
+                          color: context.textColor,
+                        )),
                     const Spacer(),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: context.successColor.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(99),
@@ -62,18 +67,19 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 6,
-                            height: 6,
+                            width: 6, height: 6,
                             decoration: BoxDecoration(
-                                color: context.successColor,
-                                shape: BoxShape.circle),
+                              color: context.successColor,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                           const SizedBox(width: 4),
-                          Text('1:1 USD',
+                          Text('APC 1:1 USD',
                               style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: context.successColor)),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: context.successColor,
+                              )),
                         ],
                       ),
                     ),
@@ -81,842 +87,592 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                 ),
               ),
             ),
-            SliverToBoxAdapter(child: _BalanceCard(apc: apcBalance, currency: _currency)),
-            SliverToBoxAdapter(child: _ActionRow(onTab: (i) => setState(() => _tabIndex = i), current: _tabIndex)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text('Two ways to settle. Pick one.',
+                    style: TextStyle(fontSize: 13, color: context.textMutedColor)),
+              ),
+            ),
+            // Two big action buttons
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate.fixed([
-                  if (_tabIndex == 0) _PortfolioView(apc: apcBalance, currency: _currency, onCurrency: (c) => setState(() => _currency = c)),
-                  if (_tabIndex == 1) _BuyView(apc: apcBalance, currency: _currency),
-                  if (_tabIndex == 2) _HistoryView(),
-                ]),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _BigActionButton(
+                        label: 'Deposit',
+                        sublabel: 'Fund wallet',
+                        icon: Icons.account_balance_wallet_rounded,
+                        color: AppColors.brand,
+                        onTap: () => context.push('/portal/crypto-deposit'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _BigActionButton(
+                        label: 'Invoice',
+                        sublabel: 'View & pay',
+                        icon: Icons.receipt_long_rounded,
+                        color: AppColors.success,
+                        onTap: () => _openInvoices(shipAsync.value?.data ?? []),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ),
+            // Balance card
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              sliver: SliverToBoxAdapter(
+                child: _BalanceCard(balance: balance),
+              ),
+            ),
+            // Invoices list
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Text('Open invoices',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: context.textColor)),
+                    const Spacer(),
+                    shipAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                      data: (res) {
+                        final list = (res.data ?? []);
+                        final unpaid = list.where((s) => _statusIsUnpaid(s.status)).length;
+                        if (unpaid == 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.danger.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text('$unpaid due',
+                              style: const TextStyle(color: AppColors.danger, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            shipAsync.when(
+              loading: () => const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: CircularProgressIndicator(color: AppColors.brand)),
+                ),
+              ),
+              error: (e, _) => SliverToBoxAdapter(
+                child: Padding(padding: const EdgeInsets.all(40), child: EmptyState(icon: Icons.error_outline_rounded, title: 'Failed: $e')),
+              ),
+              data: (res) {
+                final shipments = (res.data ?? []);
+                if (shipments.isEmpty) {
+                  return const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 0, 20, 40),
+                      child: EmptyState(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'No invoices yet',
+                        subtitle: 'Create a shipment to get an invoice.',
+                      ),
+                    ),
+                  );
+                }
+                return SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                  sliver: SliverList.separated(
+                    itemCount: shipments.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (ctx, i) => _InvoiceRow(
+                      shipment: shipments[i],
+                      onTap: () => _showInvoice(shipments[i]),
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
       ),
     );
   }
-}
 
-// ── Balance card ────────────────────────────────────────────────────
-class _BalanceCard extends StatelessWidget {
-  final double apc;
-  final FiatCurrency currency;
-  const _BalanceCard({required this.apc, required this.currency});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 12, 20, 18),
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0B1B3A), Color(0xFF0A2540), Color(0xFF0052FF)],
-          stops: [0.0, 0.65, 1.0],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0052FF).withValues(alpha: 0.30),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
+  bool _statusIsUnpaid(ShipmentStatus s) {
+    // Mock: any non-delivered, non-cancelled shipment with a price is "unpaid"
+    return s != ShipmentStatus.delivered && s != ShipmentStatus.cancelled && s != ShipmentStatus.returned;
+  }
+
+  void _openInvoices(List<Shipment> all) {
+    HapticService.selection();
+    final unpaid = all.where((s) => _statusIsUnpaid(s.status)).toList();
+    if (unpaid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No open invoices — you\'re all paid up.')),
+      );
+      return;
+    }
+    // Scroll the user to the invoice list
+    showIosSheet(
+      context: context,
+      title: '${unpaid.length} open invoice${unpaid.length == 1 ? '' : 's'}',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.10),
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.20)),
-                ),
-                child: const Center(
-                  child: Text('A',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text('Airpak Coin',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800)),
-              const Spacer(),
-              Text(currency.flag,
-                  style: const TextStyle(fontSize: 18)),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const Text('Available balance',
-              style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  letterSpacing: 0.2)),
-          const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              AnimatedCounter(
-                value: apc,
-                decimals: 2,
-                prefix: '${currency.symbol}',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 38,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1.2),
-              ),
-              const SizedBox(width: 6),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 6),
-                child: Text('APC',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '≈ ${formatFiat(apc, currency)} ${currency.code}  ·  Pegged 1:1 USD',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Action row (Buy / Deposit / Pay) ─────────────────────────────────
-class _ActionRow extends StatelessWidget {
-  final int current;
-  final ValueChanged<int> onTab;
-  const _ActionRow({required this.current, required this.onTab});
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      ('Buy', Icons.shopping_bag_rounded, const Color(0xFF0052FF)),
-      ('Deposit', Icons.account_balance_rounded, const Color(0xFF34C759)),
-      ('Pay', Icons.send_rounded, AppColors.brand),
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      child: Row(
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            Expanded(
-              child: PressScale(
-                onTap: () => onTab(i),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: current == i
-                        ? items[i].$3.withValues(alpha: 0.12)
-                        : context.surfaceColor,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: current == i
-                          ? items[i].$3
-                          : context.borderColor,
-                      width: current == i ? 1.5 : 1,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(items[i].$2,
-                          color: current == i
-                              ? items[i].$3
-                              : context.textMutedColor,
-                          size: 22),
-                      const SizedBox(height: 4),
-                      Text(items[i].$1,
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: current == i
-                                  ? items[i].$3
-                                  : context.textMutedColor)),
-                    ],
-                  ),
-                ),
-              ),
+          for (final s in unpaid.take(10))
+            IosRow(
+              icon: Icons.receipt_long_rounded,
+              iconColor: AppColors.danger,
+              label: s.trackingNumber,
+              sublabel: '${s.origin.city} → ${s.destination.city} · \$${s.price.toStringAsFixed(2)}',
+              trailing: IosTrailing.chevron,
+              onTap: () {
+                Navigator.pop(context);
+                _showInvoice(s);
+              },
             ),
-            if (i < items.length - 1) const SizedBox(width: 10),
-          ],
         ],
       ),
     );
   }
-}
 
-// ── Portfolio view (chart + asset allocation) ───────────────────────
-class _PortfolioView extends StatelessWidget {
-  final double apc;
-  final FiatCurrency currency;
-  final ValueChanged<FiatCurrency> onCurrency;
-  const _PortfolioView(
-      {required this.apc,
-      required this.currency,
-      required this.onCurrency});
-  @override
-  Widget build(BuildContext context) {
-    final spots = _makeChart();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Big chart card
-        AppCard(
-          padding: const EdgeInsets.all(18),
-          radius: 18,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+  void _showInvoice(Shipment s) {
+    final inv = 'INV-${s.trackingNumber.substring(3)}';
+    showIosSheet(
+      context: context,
+      title: 'Invoice',
+      isScrollControlled: true,
+      initialChildSize: 0.85,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Branded header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
                 children: [
-                  Text('30-day activity',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: context.textColor)),
-                  const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                    width: 44, height: 44,
                     decoration: BoxDecoration(
-                      color: context.successColor.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(99),
+                      gradient: AppColors.brandGradient,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: const Center(
+                      child: Text('A', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.trending_up_rounded,
-                            size: 12, color: context.successColor),
-                        const SizedBox(width: 3),
-                        Text('+12.4%',
-                            style: TextStyle(
-                                color: context.successColor,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11)),
+                        Text('AirPak Express',
+                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                        Text('Global logistics · 220 destinations',
+                            style: TextStyle(color: Colors.white70, fontSize: 11)),
                       ],
                     ),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: const Text('UNPAID', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                  ),
                 ],
               ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 160,
-                child: LineChart(
-                  LineChartData(
-                    gridData: const FlGridData(show: false),
-                    borderData: FlBorderData(show: false),
-                    titlesData: const FlTitlesData(show: false),
-                    lineBarsData: [
-                      LineChartBarData(
-                        spots: spots,
-                        isCurved: true,
-                        color: AirpakCoin.spark,
-                        barWidth: 2.4,
-                        dotData: const FlDotData(show: false),
-                        belowBarData: BarAreaData(
-                          show: true,
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              AirpakCoin.spark.withValues(alpha: 0.30),
-                              AirpakCoin.spark.withValues(alpha: 0.0),
-                            ],
-                          ),
+            ),
+            const SizedBox(height: 12),
+            // Invoice number & dates
+            Row(
+              children: [
+                Expanded(child: _MetaTile(label: 'Invoice #', value: inv)),
+                const SizedBox(width: 8),
+                Expanded(child: _MetaTile(label: 'Issued', value: DateFormat('MMM d, y').format(s.createdAt))),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(child: _MetaTile(label: 'Service', value: s.service)),
+                const SizedBox(width: 8),
+                Expanded(child: _MetaTile(label: 'Status', value: s.status.label, valueColor: _statusColor(s.status))),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Items table
+            Container(
+              decoration: BoxDecoration(
+                color: context.surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.borderColor),
+              ),
+              child: Column(
+                children: [
+                  _ItemRow(label: '${s.service} parcel — ${s.package.weightKg.toStringAsFixed(1)} kg', qty: '1', price: s.price.toStringAsFixed(2)),
+                  _Divider(),
+                  _ItemRow(label: 'Fuel surcharge', qty: '1', price: (s.price * 0.10).toStringAsFixed(2)),
+                  _Divider(),
+                  _ItemRow(label: 'Insurance', qty: '1', price: (s.price * 0.05).toStringAsFixed(2)),
+                  _Divider(thick: true),
+                  _ItemRow(label: 'Subtotal', price: (s.price * 1.15).toStringAsFixed(2)),
+                  _ItemRow(label: 'VAT (0%)', price: '0.00'),
+                  _ItemRow(label: 'TOTAL', price: (s.price * 1.15).toStringAsFixed(2), bold: true),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            // Shipper / Consignee
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SectionLabel('SHIPPER'),
+                  Text('${s.origin.name} · ${s.origin.city}, ${s.origin.country}',
+                      style: TextStyle(color: context.textColor, fontSize: 12, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  const _SectionLabel('CONSIGNEE'),
+                  Text('${s.destination.name} · ${s.destination.city}, ${s.destination.country}',
+                      style: TextStyle(color: context.textColor, fontSize: 12, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Pay buttons
+            Row(
+              children: [
+                Expanded(
+                  child: IosPrimaryButton(
+                    label: 'Pay with Airpak Coin',
+                    icon: Icons.payments_rounded,
+                    onPressed: () {
+                      HapticService.success();
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${(s.price * 1.15).toStringAsFixed(2)} APC deducted from wallet'),
+                          backgroundColor: AppColors.success,
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Currency selector
-        _CurrencySelector(
-          current: currency,
-          onPick: onCurrency,
-        ),
-        const SizedBox(height: 16),
-        Text('Your assets',
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: context.textColor)),
-        const SizedBox(height: 8),
-        _AssetRow(
-          symbol: 'APC',
-          name: 'Airpak Coin',
-          sub: 'Brand settlement · 1:1 USD',
-          amount: apc,
-          currency: currency,
-          isPrimary: true,
-        ),
-        _AssetRow(
-          symbol: 'REW',
-          name: 'Rewards Points',
-          sub: 'Earned per shipment · redeemable',
-          amount: 0,
-          currency: currency,
-          isPrimary: false,
-          amountText: '0 pts',
-        ),
-        const SizedBox(height: 16),
-        Text('Recent activity',
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: context.textColor)),
-        const SizedBox(height: 8),
-        ..._sampleActivity.map((t) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _ActivityRow(t: t, currency: currency),
-            )),
-      ],
-    );
-  }
-}
-
-class _AssetRow extends StatelessWidget {
-  final String symbol;
-  final String name;
-  final String sub;
-  final double amount;
-  final FiatCurrency currency;
-  final bool isPrimary;
-  final String? amountText;
-  const _AssetRow({
-    required this.symbol,
-    required this.name,
-    required this.sub,
-    required this.amount,
-    required this.currency,
-    required this.isPrimary,
-    this.amountText,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(14),
-      radius: 14,
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: isPrimary
-                  ? const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF0052FF), Color(0xFF0A2540)],
-                    )
-                  : const LinearGradient(
-                      colors: [Color(0xFFFFCC00), Color(0xFFD97706)],
-                    ),
-            ),
-            child: Center(
-              child: Text(symbol.substring(0, 1),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16)),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(name,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: context.textColor)),
-                Text(sub,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        color: context.textMutedColor)),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                amountText ?? formatFiat(amount, currency),
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: context.textColor),
-              ),
-              Text(symbol,
-                  style: TextStyle(
-                      fontSize: 11, color: context.textSubtleColor)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActivityRow extends StatelessWidget {
-  final _Txn t;
-  final FiatCurrency currency;
-  const _ActivityRow({required this.t, required this.currency});
-  @override
-  Widget build(BuildContext context) {
-    final inb = t.delta > 0;
-    return AppCard(
-      padding: const EdgeInsets.all(14),
-      radius: 14,
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: inb
-                  ? const LinearGradient(
-                      colors: [Color(0xFF34C759), Color(0xFF16A34A)])
-                  : AppColors.brandGradient,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              inb
-                  ? Icons.south_west_rounded
-                  : Icons.north_east_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(t.title,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: context.textColor)),
-                Text(t.subtitle,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        color: context.textMutedColor)),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${inb ? '+' : '-'}${formatFiat(t.delta.abs(), currency)}',
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: inb
-                        ? context.successColor
-                        : context.textColor),
-              ),
-              Text(DateFormat('MMM d · h:mm a').format(t.date),
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      color: context.textMutedColor)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Buy view ────────────────────────────────────────────────────────
-class _BuyView extends StatelessWidget {
-  final double apc;
-  final FiatCurrency currency;
-  const _BuyView({required this.apc, required this.currency});
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AppCard(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
-          radius: 18,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('You pay',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.textMutedColor)),
-              const SizedBox(height: 6),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Icon(Icons.payments_rounded,
-                      color: AppColors.brand, size: 26),
-                  const SizedBox(width: 8),
-                  Text(currency.symbol,
-                      style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          color: context.textColor)),
-                  const SizedBox(width: 6),
-                  Text('100.00',
-                      style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          color: context.textColor)),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Container(
-                height: 0.6,
-                color: context.dividerColor,
-              ),
-              const SizedBox(height: 12),
-              Text('You receive',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.textMutedColor)),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Container(
-                    width: 26,
-                    height: 26,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: AirpakCoin.brandGradient,
-                    ),
-                    child: const Center(
-                      child: Text('A',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12)),
-                    ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: IosTextButton(
+                    'Crypto',
+                    icon: Icons.currency_bitcoin_rounded,
+                    onPressed: () {
+                      Navigator.pop(context);
+                      context.push('/portal/crypto-deposit');
+                    },
                   ),
-                  const SizedBox(width: 8),
-                  Text('100.00',
-                      style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: context.textColor)),
-                  const SizedBox(width: 6),
-                  Text('APC',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: context.textMutedColor)),
-                  const Spacer(),
-                  Text('Rate 1:1',
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: context.successColor)),
-                ],
-              ),
-              const SizedBox(height: 18),
-              _BuyAmountChips(),
-              const SizedBox(height: 12),
-              Text('Buy via',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.textMutedColor)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: const [
-                  _PayMethod(
-                      label: 'Visa •• 4242', icon: Icons.credit_card_rounded),
-                  _PayMethod(label: 'FPX', icon: Icons.account_balance_rounded),
-                  _PayMethod(label: 'Apple Pay', icon: Icons.apple_rounded),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        IosPrimaryButton(
-          label: 'Buy 100 APC',
-          icon: Icons.bolt_rounded,
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Buy flow (mock)')),
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Airpak Coin is a brand-native settlement token. It is pegged 1:1 to USD, may be funded with fiat via Buy or Deposit, and is used to Pay for shipments. Withdrawals are not supported.',
-          style: TextStyle(
-              fontSize: 11.5,
-              color: context.textMutedColor,
-              height: 1.45),
-        ),
-        const SizedBox(height: 18),
-        // Crypto deposit + Contact admin — alternatives
-        IosSection(
-          header: 'Other ways to fund',
-          margin: EdgeInsets.zero,
-          rows: [
-            IosRow(
-              icon: Icons.currency_bitcoin_rounded,
-              iconColor: const Color(0xFFF7931A),
-              label: 'Crypto deposit',
-              sublabel: 'BTC · ETH · USDC · USDT · APC',
-              trailing: IosTrailing.chevron,
-              onTap: () => context.push('/portal/crypto-deposit'),
+                ),
+              ],
             ),
-            IosRow(
-              icon: Icons.support_agent_rounded,
-              iconColor: AppColors.warning,
-              label: 'Contact admin for other payment',
-              sublabel: 'Bank transfer, SWIFT, PayPal, WeChat Pay, local rails',
-              trailing: IosTrailing.chevron,
-              onTap: () => context.push('/portal/support'),
+            const SizedBox(height: 10),
+            IosTextButton(
+              'Download PDF',
+              icon: Icons.download_rounded,
+              onPressed: () {
+                HapticService.success();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PDF sent to your email.')),
+                );
+              },
             ),
           ],
         ),
-      ],
+      ),
     );
+  }
+
+  Color _statusColor(ShipmentStatus s) {
+    switch (s) {
+      case ShipmentStatus.delivered: return AppColors.success;
+      case ShipmentStatus.outForDelivery: return AppColors.info;
+      case ShipmentStatus.inTransit: return AppColors.brand;
+      case ShipmentStatus.pickedUp: return AppColors.warning;
+      case ShipmentStatus.exception: return AppColors.danger;
+      case ShipmentStatus.cancelled: return AppColors.textMuted;
+      case ShipmentStatus.returned: return AppColors.warning;
+      case ShipmentStatus.created: return AppColors.info;
+    }
   }
 }
 
-class _BuyAmountChips extends StatelessWidget {
-  const _BuyAmountChips();
+final _shipmentsProvider = FutureProvider.autoDispose
+    .family<RepoResult<List<Shipment>>, String?>((ref, userId) async {
+  final repo = ref.watch(shipmentRepoProvider);
+  return repo.listShipments(userId: userId);
+});
+
+class _BigActionButton extends StatelessWidget {
+  final String label;
+  final String sublabel;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _BigActionButton({
+    required this.label,
+    required this.sublabel,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
-    final amounts = const ['50', '100', '250', '500', '1000'];
-    return SizedBox(
-      height: 36,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: amounts.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: i == 1
-                  ? AirpakCoin.spark.withValues(alpha: 0.12)
-                  : context.surfaceMutedColor,
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(
-                color: i == 1
-                    ? AirpakCoin.spark
-                    : context.borderColor,
+    return GestureDetector(
+      onTap: () { HapticService.light(); onTap(); },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [color, color.withValues(alpha: 0.7)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                  Text(sublabel, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12, fontWeight: FontWeight.w600)),
+                ],
               ),
             ),
-            child: Text(
-              amounts[i],
-              style: TextStyle(
-                color: i == 1 ? AirpakCoin.spark : context.textBodyColor,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-              ),
-            ),
-          );
-        },
+            const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _PayMethod extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  const _PayMethod({required this.label, required this.icon});
+class _BalanceCard extends StatelessWidget {
+  final double balance;
+  const _BalanceCard({required this.balance});
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: context.surfaceMutedColor,
-        borderRadius: BorderRadius.circular(99),
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: context.borderColor),
+        boxShadow: context.cardShadow,
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: context.textBodyColor),
-          const SizedBox(width: 6),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: context.textBodyColor)),
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AirpakCoin.brandGradient,
+            ),
+            child: const Center(child: Text('A', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Airpak Coin balance', style: TextStyle(fontSize: 11, color: context.textMutedColor, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+                const SizedBox(height: 2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(balance.toStringAsFixed(2),
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: context.textColor)),
+                    const SizedBox(width: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text('APC', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: context.textMutedColor)),
+                    ),
+                    const Spacer(),
+                    Text('≈ \$${balance.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 13, color: context.textMutedColor, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// ── History view ────────────────────────────────────────────────────
-class _HistoryView extends StatelessWidget {
+class _InvoiceRow extends StatelessWidget {
+  final Shipment shipment;
+  final VoidCallback onTap;
+  const _InvoiceRow({required this.shipment, required this.onTap});
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AppCard(
-          padding: const EdgeInsets.all(16),
-          radius: 18,
+    final s = shipment;
+    final total = s.price * 1.15;
+    return Material(
+      color: context.surfaceColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () { HapticService.selection(); onTap(); },
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: context.borderColor),
+          ),
           child: Row(
             children: [
-              const Icon(Icons.lock_rounded, color: AppColors.brand, size: 22),
-              const SizedBox(width: 10),
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.dangerSoft,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.receipt_long_rounded, color: AppColors.danger, size: 20),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('No withdrawal supported',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: context.textColor)),
-                    Text(
-                      'Airpak Coin is a brand settlement token. Move it via Buy, Deposit or Pay only.',
-                      style: TextStyle(
-                          fontSize: 12, color: context.textMutedColor),
-                    ),
+                    Text('INV-${s.trackingNumber.substring(3)}',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: context.textColor)),
+                    Text('${s.origin.city} → ${s.destination.city}',
+                        style: TextStyle(fontSize: 11, color: context.textMutedColor, fontWeight: FontWeight.w600)),
                   ],
                 ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('\$${total.toStringAsFixed(2)}',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.danger)),
+                  Text('Due now', style: TextStyle(fontSize: 10.5, color: context.textMutedColor, fontWeight: FontWeight.w700)),
+                ],
               ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Text('All transactions',
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: context.textColor)),
-        const SizedBox(height: 8),
-        ..._sampleActivity.map((t) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _ActivityRow(
-                  t: t,
-                  currency: kFiatCurrencies.first),
-            )),
-      ],
-    );
-  }
-}
-
-// ── Currency selector ───────────────────────────────────────────────
-class _CurrencySelector extends StatelessWidget {
-  final FiatCurrency current;
-  final ValueChanged<FiatCurrency> onPick;
-  const _CurrencySelector({required this.current, required this.onPick});
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: kFiatCurrencies.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final c = kFiatCurrencies[i];
-          final sel = c.code == current.code;
-          return PressScale(
-            onTap: () => onPick(c),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: sel
-                    ? AirpakCoin.spark.withValues(alpha: 0.12)
-                    : context.surfaceColor,
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(
-                  color: sel ? AirpakCoin.spark : context.borderColor,
-                  width: sel ? 1.5 : 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(c.flag, style: const TextStyle(fontSize: 14)),
-                  const SizedBox(width: 6),
-                  Text(c.code,
-                      style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: sel
-                              ? AirpakCoin.spark
-                              : context.textBodyColor)),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }
 }
 
-class _Txn {
-  final String title;
-  final String subtitle;
-  final double delta;
-  final DateTime date;
-  const _Txn(this.title, this.subtitle, this.delta, this.date);
+class _MetaTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+  const _MetaTile({required this.label, required this.value, this.valueColor});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, color: context.textMutedColor, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: valueColor ?? context.textColor)),
+        ],
+      ),
+    );
+  }
 }
 
-final _sampleActivity = [
-  _Txn('Top-up · Visa •• 4242', 'Bought 200 APC @ 1:1', 200.0,
-      DateTime.now().subtract(const Duration(hours: 4))),
-  _Txn('Pay · Shipment APK2026052600003', 'Standard · Kuala Lumpur → Jakarta', -32.40,
-      DateTime.now().subtract(const Duration(hours: 6))),
-  _Txn('Reward redemption', 'Discount voucher', -25.0,
-      DateTime.now().subtract(const Duration(days: 1))),
-  _Txn('Pay · Shipment APK20260524001233', 'Express · Singapore → Manila', -18.95,
-      DateTime.now().subtract(const Duration(days: 2))),
-  _Txn('Top-up · FPX', 'Maybank •• 4421', 150.0,
-      DateTime.now().subtract(const Duration(days: 3))),
-  _Txn('Pay · Shipment APK20260421000111', 'Sea Freight · Hong Kong', -210.0,
-      DateTime.now().subtract(const Duration(days: 5))),
-];
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: TextStyle(fontSize: 10, color: context.textMutedColor, fontWeight: FontWeight.w800, letterSpacing: 0.5));
+  }
+}
 
-List<FlSpot> _makeChart() {
-  final r = DateTime.now().millisecondsSinceEpoch;
-  return List.generate(30, (i) {
-    final v = 150 + ((i * 7 + (r ~/ 1000) % 11) % 50).toDouble() + i * 0.6;
-    return FlSpot(i.toDouble(), v);
-  });
+class _ItemRow extends StatelessWidget {
+  final String label;
+  final String? qty;
+  final String? price;
+  final bool bold;
+  const _ItemRow({required this.label, this.qty, this.price, this.bold = false});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TextStyle(fontSize: 12.5, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: context.textColor))),
+          if (qty != null) Text(qty!, style: TextStyle(fontSize: 12, color: context.textMutedColor, fontWeight: FontWeight.w700)),
+          if (price != null) ...[
+            const SizedBox(width: 12),
+            Text(price!, style: TextStyle(fontSize: 12.5, fontWeight: bold ? FontWeight.w800 : FontWeight.w700, color: context.textColor, fontFamily: 'monospace')),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  final bool thick;
+  const _Divider({this.thick = false});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: thick ? 1 : 0.5,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: thick ? context.borderColor : context.dividerColor,
+    );
+  }
 }

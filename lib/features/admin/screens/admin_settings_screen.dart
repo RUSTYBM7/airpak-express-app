@@ -1,161 +1,289 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/cupertino.dart';
 import '../../../app/design_system.dart';
-import '../../../app/theme.dart';
+import '../../../app/ios_components.dart';
+import '../../../app/router.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/motion.dart';
 import '../../auth/providers/auth_controller.dart';
+import '../../settings/settings_controller.dart';
 
+/// Admin settings — every option is real-time, persisted, and
+/// observable from anywhere in the app via SettingsController.
 class AdminSettingsScreen extends ConsumerWidget {
   const AdminSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
+    final settings = ref.watch(settingsControllerProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
-        const SectionHeader('Workspace'),
+        SectionHeader('Workspace', trailing: Text('${auth.profile?.companyName ?? "—"}', style: TextStyle(color: context.textMutedColor, fontSize: 12, fontWeight: FontWeight.w700))),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: context.surfaceColor,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: context.borderColor),
           ),
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 48, height: 48,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.accent, Color(0xFF111827)],
-                  ),
+                  gradient: const LinearGradient(colors: [AppColors.accent, Color(0xFF111827)]),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.business, color: Colors.white),
+                child: const Center(child: Icon(Icons.shield_rounded, color: Colors.white, size: 22)),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('AirPak Express',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w800, fontSize: 15)),
-                    Text('admin@airpak-express.com',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: context.textMutedColor)),
+                    Text(auth.profile?.fullName ?? 'Admin', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: context.textColor)),
+                    Text('${auth.profile?.email ?? "—"} · Admin', style: TextStyle(fontSize: 12, color: context.textMutedColor)),
                   ],
                 ),
               ),
-              IconButton(icon: const Icon(Icons.edit), onPressed: () {}),
+              IosSwitch(value: settings.twoFactor, onChanged: (v) {
+                ref.read(settingsControllerProvider.notifier).set2FA(v);
+                HapticService.success();
+              }),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        const SectionHeader('Security'),
-        const SizedBox(height: 8),
-        _row(context, Icons.shield_outlined, 'Two-factor auth', 'Enabled',
-            AppColors.success),
-        _row(context, Icons.devices, 'Active sessions', '2 devices'),
-        _row(context, Icons.history, 'Audit log', 'Last 90 days'),
-        const SizedBox(height: 16),
-        const SectionHeader('Operations'),
-        const SizedBox(height: 8),
-        _row(context, Icons.local_shipping, 'Carrier integrations',
-            'DHL, FedEx, UPS, Aramex'),
-        _row(context, Icons.receipt_long, 'Invoice template', 'Default • v3'),
-        _row(context, Icons.map, 'Coverage zones', '12 countries'),
-        const SizedBox(height: 16),
-        const SectionHeader('Workspace preferences'),
-        const SizedBox(height: 8),
-        _row(context, Icons.language, 'Default language', 'English (US)'),
-        _row(context, Icons.payments, 'Default currency', 'USD'),
-        _row(context, Icons.tune, 'Auto-assign agents', 'On'),
-        const SizedBox(height: 16),
-        const SectionHeader('Signed in as'),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: AppColors.brandLight,
-                child: Text(
-                  auth.profile?.displayName.substring(0, 1).toUpperCase() ??
-                      'A',
-                  style: const TextStyle(
-                      color: AppColors.brand, fontWeight: FontWeight.w800),
-                ),
+        const SizedBox(height: 20),
+        SectionHeader('Operations'),
+        IosSection(
+          header: 'Live operations',
+          margin: EdgeInsets.zero,
+          rows: [
+            IosRow(
+              leading: Switch(
+                value: settings.adminTelemetry,
+                activeColor: AppColors.brand,
+                onChanged: (v) {
+                  ref.read(settingsControllerProvider.notifier).setAdminTelemetry(v);
+                  HapticService.selection();
+                },
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(auth.profile?.displayName ?? 'Admin',
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text(auth.profile?.email ?? '',
-                        style: TextStyle(
-                            color: context.textMutedColor, fontSize: 12)),
-                  ],
-                ),
+              icon: Icons.speed_rounded,
+              iconColor: AppColors.brand,
+              label: 'Live telemetry',
+              sublabel: settings.adminTelemetry ? 'Streaming every 4 seconds' : 'Paused',
+            ),
+            IosRow(
+              leading: Switch(
+                value: settings.adminAiCopilot,
+                activeColor: AppColors.brand,
+                onChanged: (v) {
+                  ref.read(settingsControllerProvider.notifier).setAdminAiCopilot(v);
+                  HapticService.selection();
+                },
               ),
-              const Text('ADMIN',
-                  style: TextStyle(
-                      color: AppColors.brand,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11)),
-            ],
-          ),
+              icon: Icons.auto_awesome_rounded,
+              iconColor: const Color(0xFFAF52DE),
+              label: 'AI co-pilot',
+              sublabel: settings.adminAiCopilot ? 'Assisting with routing, holds, customer comms' : 'Off',
+            ),
+            IosRow(
+              leading: Switch(
+                value: settings.adminSlack,
+                activeColor: AppColors.brand,
+                onChanged: (v) {
+                  ref.read(settingsControllerProvider.notifier).setAdminSlack(v);
+                  HapticService.selection();
+                },
+              ),
+              icon: Icons.tag_rounded,
+              iconColor: const Color(0xFF4A154B),
+              label: 'Slack alerts',
+              sublabel: settings.adminSlack ? 'On — #airpak-ops' : 'Off',
+            ),
+            IosRow(
+              icon: Icons.schedule_rounded,
+              iconColor: const Color(0xFF8E8E93),
+              label: 'Time zone',
+              value: settings.adminTimezone,
+              trailing: IosTrailing.chevron,
+              onTap: () => _showTimezone(context, ref),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        SectionHeader('Notifications'),
+        IosSection(
+          header: 'Real-time alerts',
+          margin: EdgeInsets.zero,
+          rows: [
+            IosRow(
+              leading: Switch(
+                value: settings.pushEnabled,
+                activeColor: AppColors.brand,
+                onChanged: (v) => ref.read(settingsControllerProvider.notifier).setPush(v),
+              ),
+              icon: Icons.notifications_active_rounded,
+              iconColor: const Color(0xFFFF3B30),
+              label: 'Push notifications',
+              sublabel: 'On this device',
+            ),
+            IosRow(
+              leading: Switch(
+                value: settings.emailEnabled,
+                activeColor: AppColors.brand,
+                onChanged: (v) => ref.read(settingsControllerProvider.notifier).setEmail(v),
+              ),
+              icon: Icons.email_rounded,
+              iconColor: const Color(0xFF007AFF),
+              label: 'Email digests',
+              sublabel: 'Daily summary at 09:00',
+            ),
+            IosRow(
+              leading: Switch(
+                value: settings.smsEnabled,
+                activeColor: AppColors.brand,
+                onChanged: (v) => ref.read(settingsControllerProvider.notifier).setSms(v),
+              ),
+              icon: Icons.sms_rounded,
+              iconColor: const Color(0xFF34C759),
+              label: 'SMS escalation',
+              sublabel: 'Critical holds only',
+            ),
+            IosRow(
+              leading: Switch(
+                value: settings.haptics,
+                activeColor: AppColors.brand,
+                onChanged: (v) => ref.read(settingsControllerProvider.notifier).setHaptics(v),
+              ),
+              icon: Icons.vibration_rounded,
+              iconColor: const Color(0xFFFF3B30),
+              label: 'Haptic feedback',
+              sublabel: 'Tactile alerts',
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        SectionHeader('Personal'),
+        IosSection(
+          header: 'Account',
+          margin: EdgeInsets.zero,
+          rows: [
+            IosRow(
+              leading: Switch(
+                value: settings.faceId,
+                activeColor: AppColors.brand,
+                onChanged: (v) => ref.read(settingsControllerProvider.notifier).setFaceId(v),
+              ),
+              icon: Icons.fingerprint_rounded,
+              iconColor: const Color(0xFF34C759),
+              label: 'Face ID',
+              sublabel: 'Unlock with biometrics',
+            ),
+            IosRow(
+              leading: Switch(
+                value: settings.biometricPayments,
+                activeColor: AppColors.brand,
+                onChanged: (v) => ref.read(settingsControllerProvider.notifier).setBiometricPayments(v),
+              ),
+              icon: Icons.account_balance_wallet_rounded,
+              iconColor: AppColors.success,
+              label: 'Biometric approvals',
+              sublabel: 'Confirm payouts and invoices',
+            ),
+            IosRow(
+              icon: Icons.credit_card_rounded,
+              iconColor: const Color(0xFF34C759),
+              label: 'Payout account',
+              value: 'DBS · •• 7821',
+              trailing: IosTrailing.chevron,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payout account management coming soon.'))),
+            ),
+            IosRow(
+              icon: Icons.public_rounded,
+              iconColor: const Color(0xFF5856D6),
+              label: 'Currency',
+              value: settings.defaultCurrency,
+              trailing: IosTrailing.chevron,
+              onTap: () => _showCurrencies(context, ref),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        SectionHeader('Sign out'),
+        IosSection(
+          header: '',
+          margin: EdgeInsets.zero,
+          rows: [
+            IosRow(
+              icon: Icons.logout_rounded,
+              iconColor: const Color(0xFFFF3B30),
+              label: 'Sign out of admin console',
+              destructive: true,
+              onTap: () async {
+                await ref.read(authControllerProvider.notifier).signOut();
+                if (context.mounted) context.go(AppRoutes.adminLogin);
+              },
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _row(BuildContext context, IconData icon, String label, String value,
-      [Color? valueColor]) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
+  void _showCurrencies(BuildContext context, WidgetRef ref) {
+    final c = ['USD', 'EUR', 'GBP', 'JPY', 'CNY', 'AUD', 'SGD', 'MYR', 'HKD', 'KRW', 'INR', 'AED', 'SAR'];
+    showIosSheet(
+      context: context,
+      title: 'Currency',
+      child: Column(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.brandLight,
-              borderRadius: BorderRadius.circular(10),
+          for (final x in c)
+            IosRow(
+              icon: Icons.public_rounded,
+              label: x,
+              trailing: IosTrailing.check,
+              onTap: () {
+                ref.read(settingsControllerProvider.notifier).setDefaultCurrency(x);
+                HapticService.selection();
+                Navigator.pop(context);
+              },
             ),
-            child: Icon(icon, color: AppColors.brand, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(label,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-          ),
-          Text(value,
-              style: TextStyle(
-                  color: valueColor ?? AppColors.textMuted,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12)),
-          const SizedBox(width: 4),
-          Icon(Icons.chevron_right, color: context.textMutedColor),
+        ],
+      ),
+    );
+  }
+
+  void _showTimezone(BuildContext context, WidgetRef ref) {
+    final tzs = [
+      'UTC', 'Asia/Singapore', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata',
+      'Asia/Dubai', 'Europe/London', 'Europe/Berlin', 'Europe/Paris',
+      'America/New_York', 'America/Chicago', 'America/Los_Angeles',
+      'Australia/Sydney', 'Pacific/Auckland',
+    ];
+    showIosSheet(
+      context: context,
+      title: 'Time zone',
+      child: Column(
+        children: [
+          for (final t in tzs)
+            IosRow(
+              icon: Icons.schedule_rounded,
+              label: t,
+              trailing: IosTrailing.check,
+              onTap: () {
+                ref.read(settingsControllerProvider.notifier).setAdminTimezone(t);
+                HapticService.selection();
+                Navigator.pop(context);
+              },
+            ),
         ],
       ),
     );
