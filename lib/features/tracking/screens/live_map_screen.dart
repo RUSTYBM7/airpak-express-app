@@ -139,8 +139,10 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
       extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
+      body: SizedBox.expand(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
           // ── Map canvas with pinch-to-zoom ──────────────────────────
           Positioned.fill(
             child: InteractiveViewer(
@@ -249,6 +251,7 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen>
               child: _HoldBanner(reason: _simHoldReason!),
             ),
         ],
+        ),
       ),
     );
   }
@@ -397,15 +400,28 @@ class _LiveTelemetryCardState extends State<_LiveTelemetryCard> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-      margin: const EdgeInsets.symmetric(horizontal: 10),
+    return Container(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(_expanded ? 28 : 22)),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.0),
+            Colors.black.withValues(alpha: 0.85),
+            const Color(0xFF000000),
+          ],
+          stops: const [0.0, 0.15, 0.4],
+        ),
       ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        margin: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.62),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(_expanded ? 28 : 22)),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+        ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -573,6 +589,7 @@ class _LiveTelemetryCardState extends State<_LiveTelemetryCard> {
             ),
         ],
       ),
+      ),
     );
   }
 }
@@ -711,8 +728,8 @@ class _SnapMapPainter extends CustomPainter {
 
     // Subtle lat/lng grid
     final grid = Paint()
-      ..color = const Color(0xFF2A3142).withValues(alpha: 0.45)
-      ..strokeWidth = 0.4;
+      ..color = const Color(0xFF3D4862).withValues(alpha: 0.7)
+      ..strokeWidth = 0.6;
     for (int i = 0; i <= 10; i++) {
       final x = i * size.width / 10;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
@@ -728,26 +745,26 @@ class _SnapMapPainter extends CustomPainter {
       Offset(0.55, 0.05), Offset(0.62, 0.10), Offset(0.60, 0.20),
       Offset(0.58, 0.32), Offset(0.55, 0.45), Offset(0.56, 0.55),
       Offset(0.58, 0.62), Offset(0.61, 0.70), Offset(0.62, 0.78),
-    ], const Color(0xFF1E2A3A));
+    ], const Color(0xFF2A3A52));
     // Sumatra (long diagonal island)
     _drawLandMass(canvas, size, [
       Offset(0.50, 0.62), Offset(0.53, 0.68), Offset(0.60, 0.74),
       Offset(0.68, 0.78), Offset(0.74, 0.83), Offset(0.78, 0.88),
       Offset(0.76, 0.92), Offset(0.70, 0.90), Offset(0.62, 0.86),
       Offset(0.55, 0.80), Offset(0.50, 0.72),
-    ], const Color(0xFF1E2A3A));
+    ], const Color(0xFF2A3A52));
     // Borneo (round blob top-right)
     _drawLandMass(canvas, size, [
       Offset(0.78, 0.32), Offset(0.85, 0.30), Offset(0.90, 0.34),
       Offset(0.92, 0.42), Offset(0.90, 0.50), Offset(0.85, 0.54),
       Offset(0.78, 0.50), Offset(0.74, 0.42),
-    ], const Color(0xFF1E2A3A));
+    ], const Color(0xFF2A3A52));
     // Java (long thin bottom)
     _drawLandMass(canvas, size, [
       Offset(0.62, 0.90), Offset(0.70, 0.92), Offset(0.78, 0.94),
       Offset(0.84, 0.96), Offset(0.88, 0.98), Offset(0.84, 0.99),
       Offset(0.76, 0.98), Offset(0.68, 0.96), Offset(0.62, 0.94),
-    ], const Color(0xFF1E2A3A));
+    ], const Color(0xFF2A3A52));
 
     // City labels (faint)
     _drawCityLabel(canvas, size, 'KUALA LUMPUR', 0.55, 0.30, const Color(0xFF8FA0BD));
