@@ -209,6 +209,9 @@ class ShipmentDetailScreen extends ConsumerWidget {
                             spacing: 6,
                             runSpacing: 6,
                             children: [
+                              _action(Icons.map_rounded, 'Live map', () {
+                                context.push('${AppRoutes.tracking}/${s.trackingNumber}');
+                              }),
                               _action(Icons.print, 'Label', () {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(

@@ -33,7 +33,7 @@ class LargeNavBar extends StatelessWidget {
       stretch: true,
       expandedHeight: 110,
       collapsedHeight: kToolbarHeight,
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.surface, // overridden by surfaceColor in child
       surfaceTintColor: AppColors.surface,
       title: Text(title,
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17, color: context.textColor)),
@@ -95,7 +95,7 @@ class IosBlurBar extends StatelessWidget {
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
         child: Container(
-          color: AppColors.surface.withValues(alpha: 0.72),
+          color: context.surfaceColor.withValues(alpha: 0.72),
           padding:
               EdgeInsets.only(top: MediaQuery.of(context).padding.top),
           child: Row(
@@ -155,7 +155,7 @@ class IosSection extends StatelessWidget {
             ),
           Container(
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: context.surfaceColor,
               borderRadius: BorderRadius.circular(AppRadius.md),
               boxShadow: AppElevation.xs,
             ),
@@ -168,7 +168,7 @@ class IosSection extends StatelessWidget {
                       padding: const EdgeInsets.only(left: 56),
                       child: Container(
                         height: 0.5,
-                        color: AppColors.divider,
+                        color: context.dividerColor,
                       ),
                     ),
                 ],
@@ -278,7 +278,7 @@ class IosRow extends StatelessWidget {
                 Text(
                   value!,
                   style: TextStyle(
-                    color: valueColor ?? AppColors.textMuted,
+                    color: valueColor ?? context.textMutedColor,
                     fontSize: 15,
                   ),
                 ),
@@ -462,6 +462,7 @@ class IosTextField extends StatelessWidget {
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
   final TextCapitalization textCapitalization;
   final bool autofocus;
   final int? maxLines;
@@ -476,6 +477,7 @@ class IosTextField extends StatelessWidget {
     this.keyboardType = TextInputType.text,
     this.validator,
     this.onChanged,
+    this.onSubmitted,
     this.textCapitalization = TextCapitalization.none,
     this.autofocus = false,
     this.maxLines = 1,
@@ -489,6 +491,7 @@ class IosTextField extends StatelessWidget {
       obscureText: obscure,
       keyboardType: keyboardType,
       onChanged: onChanged,
+      onFieldSubmitted: onSubmitted,
       textCapitalization: textCapitalization,
       validator: validator,
       autofocus: autofocus,
@@ -593,7 +596,7 @@ Future<T?> showIosSheet<T>({
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
-            color: AppColors.surface.withValues(alpha: 0.98),
+            color: context.surfaceColor.withValues(alpha: 0.98),
             child: ListView(
               controller: controller,
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
@@ -610,7 +613,7 @@ Future<T?> showIosSheet<T>({
                   ),
                 ),
                 if (title != null) ...[
-                  Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.text)),
+                  Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.textColor)),
                   const SizedBox(height: 14),
                 ],
                 child,

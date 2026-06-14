@@ -74,7 +74,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             children: [
               const Icon(Icons.fingerprint_rounded, color: Colors.white),
               const SizedBox(width: 8),
-              Text('$provider sign-in demo · use email + password'),
+              Text('$provider sign-in · use email + password'),
             ],
           ),
           backgroundColor: AppColors.brand,
@@ -415,7 +415,7 @@ class _BiometricButton extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Use biometric authentication · demo',
+                      'Use biometric authentication',
                       style: TextStyle(
                         color: context.textMutedColor,
                         fontSize: 11,

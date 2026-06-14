@@ -753,6 +753,7 @@ Future<void> showIosShareSheet({
   required String title,
   String? message,
   String? url,
+  List<String>? items,
 }) async {
   HapticService.light();
   await showCupertinoModalPopup<void>(

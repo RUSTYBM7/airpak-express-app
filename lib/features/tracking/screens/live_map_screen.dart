@@ -1,1325 +1,905 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:latlong2/latlong.dart' show LatLng;
+import 'package:intl/intl.dart';
 
+import '../../../app/cupertino.dart';
 import '../../../app/design_system.dart';
+import '../../../app/router.dart';
+import '../../../core/data/repositories.dart';
+import '../../../core/models/shipment.dart';
 import '../../../core/widgets/motion.dart';
+import '../../auth/providers/auth_controller.dart';
 
-/// Full-screen iOS-Maps-style live tracking page.
+/// Snapchat-style live tracking map.
 ///
-/// The map is rendered with a **fully synthetic dark cartography painter**:
-/// country borders, water, highways, sea-lanes. This guarantees a real
-/// Apple-Maps look in any browser without depending on tile-server quirks.
-/// On top of that, glass controls, live dashboard cards, and a draggable
-/// bottom sheet with the shipment timeline.
-class LiveMapScreen extends StatefulWidget {
+/// The whole map is a `CustomPainter` drawn into a `InteractiveViewer`
+/// so the user can pinch to zoom, drag to pan, and double-tap to zoom
+/// in — exactly like Snapchat's Snap Map.
+///
+/// The current parcel position is rendered as a glowing animated dot
+/// that pulses every second. The route is rendered as a curved line
+/// from origin → present → destination with waypoint pins.
+///
+/// A small bottom sheet shows the live telemetry (ETA, distance,
+/// speed, courier battery, altitude) and the latest 4 events.
+class LiveMapScreen extends ConsumerStatefulWidget {
   final String tracking;
   const LiveMapScreen({super.key, required this.tracking});
+
   @override
-  State<LiveMapScreen> createState() => _LiveMapScreenState();
+  ConsumerState<LiveMapScreen> createState() => _LiveMapScreenState();
 }
 
-class _LiveMapScreenState extends State<LiveMapScreen> {
-  bool _following = true;
-  bool _showDashboard = true;
-  int _zoomLevel = 6;
+class _LiveMapScreenState extends ConsumerState<LiveMapScreen>
+    with TickerProviderStateMixin {
+  final TransformationController _xform = TransformationController();
+  Timer? _tick;
+  int _pulseTick = 0;
+  bool _followCourier = true;
 
-  // Real route: Kuala Lumpur → Singapore → Jakarta.
-  static const _origin = LatLng(3.1390, 101.6869);
-  static const _current = LatLng(1.3521, 103.8198);
-  static const _destination = LatLng(-6.2088, 106.8456);
+  // Synthetic live data — refreshed every 4s to feel "live".
+  double _simProgress = 0.65; // 0..1
+  double _simSpeed = 38; // km/h
+  int _simBattery = 87; // %
+  double _simAltitude = 42; // m
+  double _simDistanceKm = 12.4;
+  Duration _simEta = const Duration(minutes: 5, seconds: 42);
+  String? _simHoldReason;
 
-  static const _route = <LatLng>[
-    LatLng(3.1390, 101.6869),
-    LatLng(2.7400, 102.2500),
-    LatLng(2.2000, 102.5500),
-    LatLng(1.9000, 103.0000),
-    LatLng(1.3521, 103.8198),
-    LatLng(0.5000, 104.5000),
-    LatLng(-1.5000, 105.0000),
-    LatLng(-3.5000, 105.8000),
-    LatLng(-5.0000, 106.5000),
-    LatLng(-6.2088, 106.8456),
-  ];
+  static const _lat0 = 3.1390; // Kuala Lumpur
+  static const _lat1 = -6.2088; // Jakarta
+  // Map a [0..1] t along the route to a (lat, lng) using a great-circle-ish curve.
+  Offset _routeAt(double t) {
+    final l0 = _lat0;
+    final l1 = _lat1;
+    // Curve via Singapore midpoint for visual interest
+    final midLat = 1.3521;
+    final midLng = 103.8198;
+    final l = (1 - t) * l0 + t * l1;
+    final lng = (1 - t) * 101.6869 + t * 106.8456;
+    // bend toward midpoint
+    final bend = math.sin(t * math.pi) * 0.20;
+    return Offset(lng + bend * 5, l + bend * 2);
+  }
 
   @override
   void initState() {
     super.initState();
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ));
+    _tick = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted) return;
+      setState(() {
+        _pulseTick++;
+        if (_simProgress < 0.98) {
+          _simProgress = math.min(0.98, _simProgress + 0.012);
+          _simSpeed = 32 + (math.sin(_pulseTick * 0.7) + 1) * 8;
+          _simDistanceKm = math.max(0.4, _simDistanceKm - 0.6);
+          final secs = (_simDistanceKm / _simSpeed * 3600).round();
+          _simEta = Duration(seconds: secs);
+          _simBattery = math.max(40, _simBattery - 1);
+          _simAltitude = 30 + math.sin(_pulseTick * 0.5) * 25;
+        }
+      });
+    });
+    HapticService.light();
   }
 
   @override
   void dispose() {
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ));
+    _tick?.cancel();
+    _xform.dispose();
     super.dispose();
   }
 
-  void _zoom(double delta) =>
-      setState(() => _zoomLevel = (_zoomLevel + delta).clamp(2, 18).toInt());
+  void _zoom(double delta) {
+    final m = _xform.value;
+    final scale = (m.getMaxScaleOnAxis() * (1 + delta)).clamp(0.6, 6.0);
+    _xform.value = Matrix4.identity()..scale(scale);
+  }
+
+  void _resetView() {
+    _xform.value = Matrix4.identity();
+    HapticService.selection();
+  }
+
+  void _recenter() {
+    // Recenter on the courier's current location
+    setState(() => _followCourier = true);
+    final courier = _routeAt(_simProgress);
+    // Compute the canvas-space position of the courier
+    final canvasPos = _toCanvas(courier);
+    // Center the viewport on the courier
+    final size = MediaQuery.of(context).size;
+    final tx = (size.width / 2 - canvasPos.dx) * 1.6;
+    final ty = (size.height / 2 - canvasPos.dy) * 1.6;
+    _xform.value = Matrix4.identity()
+      ..scale(1.6)
+      ..translate(tx / 1.6, ty / 1.6);
+    HapticService.light();
+  }
+
+  // Convert a (lng, lat) to a normalized canvas coordinate
+  Offset _toCanvas(Offset geo) {
+    final lng = geo.dx;
+    final lat = geo.dy;
+    // Visible window: lng 95..115, lat -10..6
+    final x = (lng - 95) / 20;
+    final y = 1 - (lat + 10) / 16; // flip Y for canvas
+    return Offset(x * 1000, y * 800);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0B10),
+      backgroundColor: const Color(0xFF0B1220),
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // ── The synthetic dark map — fills the entire screen ─────
+          // ── Map canvas with pinch-to-zoom ──────────────────────────
           Positioned.fill(
             child: InteractiveViewer(
-              minScale: 1.0,
-              maxScale: 4.0,
-              child: CustomPaint(
-                painter: _DarkMapPainter(
-                  route: _route,
-                  origin: _origin,
-                  current: _current,
-                  destination: _destination,
-                  zoom: _zoomLevel,
-                ),
-              ),
-            ),
-          ),
-          // Very light vignette (no more heavy dark overlay)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.15),
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.22),
-                    ],
-                    stops: const [0.0, 0.45, 1.0],
+              transformationController: _xform,
+              minScale: 0.6,
+              maxScale: 6.0,
+              boundaryMargin: const EdgeInsets.all(200),
+              onInteractionEnd: (_) {
+                final scale = _xform.value.getMaxScaleOnAxis();
+                if (scale != 1.6) {
+                  setState(() => _followCourier = false);
+                }
+              },
+              child: SizedBox(
+                width: 1000,
+                height: 800,
+                child: CustomPaint(
+                  painter: _SnapMapPainter(
+                    progress: _simProgress,
+                    pulseTick: _pulseTick,
+                    toCanvas: _toCanvas,
+                    routeAt: _routeAt,
+                    isDark: true,
                   ),
                 ),
               ),
             ),
           ),
-          // ── Top glass bar ───────────────────────────────────────
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                child: Row(
-                  children: [
-                    _GlassButton(
-                      icon: Icons.arrow_back_ios_new_rounded,
-                      onTap: () => context.pop(),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: BackdropFilter(
-                          filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.62),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                  color: Colors.white
-                                      .withValues(alpha: 0.14)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Tracking',
-                                    style: TextStyle(
-                                        color: Colors.white60,
-                                        fontSize: 10.5,
-                                        letterSpacing: 0.3)),
-                                Text(widget.tracking,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w800)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _GlassButton(icon: Icons.share_rounded, onTap: () {}),
-                  ],
-                ),
+
+          // ── Top glass bar ─────────────────────────────────────────
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+              child: _GlassBar(
+                tracking: widget.tracking,
+                onBack: () => context.canPop() ? context.pop() : context.go(AppRoutes.portalDashboard),
+                onClose: () => context.go(AppRoutes.portalDashboard),
               ),
             ),
           ),
-          // ── Live status pill ───────────────────────────────────
+
+          // ── Right-side controls ──────────────────────────────────
           Positioned(
-            top: MediaQuery.of(context).padding.top + 70,
-            left: 0,
-            right: 0,
-            child: const Center(child: _LiveStatusPill()),
-          ),
-          // ── Right-side zoom + recenter + dashboard toggle ──────
-          Positioned(
-            right: 12,
-            top: MediaQuery.of(context).padding.top + 200,
+            right: 14,
+            top: MediaQuery.of(context).padding.top + 80,
             child: Column(
               children: [
-                _GlassButton(
-                  icon: Icons.add_rounded,
-                  onTap: () => _zoom(1),
-                  size: 40,
+                _MapButton(icon: Icons.add_rounded, onTap: () => _zoom(0.3)),
+                const SizedBox(height: 8),
+                _MapButton(icon: Icons.remove_rounded, onTap: () => _zoom(-0.3)),
+                const SizedBox(height: 8),
+                _MapButton(
+                  icon: _followCourier ? Icons.my_location_rounded : Icons.location_searching_rounded,
+                  active: _followCourier,
+                  onTap: _recenter,
                 ),
                 const SizedBox(height: 8),
-                _GlassButton(
-                  icon: Icons.remove_rounded,
-                  onTap: () => _zoom(-1),
-                  size: 40,
-                ),
-                const SizedBox(height: 8),
-                _GlassButton(
-                  icon: _following
-                      ? Icons.gps_fixed_rounded
-                      : Icons.gps_not_fixed_rounded,
-                  onTap: () => setState(() => _following = !_following),
-                  size: 40,
-                  active: _following,
-                ),
-                const SizedBox(height: 8),
-                _GlassButton(
-                  icon: _showDashboard
-                      ? Icons.dashboard_rounded
-                      : Icons.dashboard_outlined,
-                  onTap: () => setState(() => _showDashboard = !_showDashboard),
-                  size: 40,
-                  active: _showDashboard,
-                ),
+                _MapButton(icon: Icons.layers_rounded, onTap: () {
+                  HapticService.selection();
+                  showIosShareSheet(
+                    context: context,
+                    title: 'Map style',
+                    message: 'Choose how the map looks.',
+                    items: const ['Map', 'Satellite', 'Dark', 'Light'],
+                  );
+                }),
               ],
             ),
           ),
-          // ── Live data dashboard cards ──────────────────────────
-          if (_showDashboard)
-            // Compact horizontal stats bar — way less obtrusive.
-            Positioned(
-              left: 12,
-              right: 72,
-              top: MediaQuery.of(context).padding.top + 102,
-              child: _CompactStatsBar(),
-            ),
-          // ── Bottom shipment sheet ──────────────────────────────
+
+          // ── Bottom telemetry + actions ───────────────────────────
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _BottomShipmentSheet(
-              tracking: widget.tracking,
+            left: 0, right: 0, bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: _LiveTelemetryCard(
+                progress: _simProgress,
+                speed: _simSpeed,
+                battery: _simBattery,
+                altitude: _simAltitude,
+                distanceKm: _simDistanceKm,
+                eta: _simEta,
+                holdReason: _simHoldReason,
+                tracking: widget.tracking,
+                origin: _routeAt(0),
+                present: _routeAt(_simProgress),
+                destination: _routeAt(1),
+                onShare: () {
+                  HapticService.success();
+                  Clipboard.setData(ClipboardData(text: widget.tracking));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Tracking number copied')),
+                  );
+                },
+                onSupport: () => context.push(AppRoutes.portalSupport),
+              ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
 
-// ── Synthetic dark map painter ─────────────────────────────────────
-
-class _DarkMapPainter extends CustomPainter {
-  final List<LatLng> route;
-  final LatLng origin;
-  final LatLng current;
-  final LatLng destination;
-  final int zoom;
-
-  _DarkMapPainter({
-    required this.route,
-    required this.origin,
-    required this.current,
-    required this.destination,
-    required this.zoom,
-  });
-
-  // Map view bounds: Singapore–Jakarta corridor.
-  static const _boundsN = 5.5;  // top (degrees lat)
-  static const _boundsS = -8.0; // bottom
-  static const _boundsW = 99.0;  // left (degrees lng)
-  static const _boundsE = 108.5; // right
-
-  // Landmass polygons (simplified coastlines, lng/lat pairs).
-  // We use a few hand-tuned continent outlines plus Singapore,
-  // Java, Sumatra, Borneo.
-  static final List<List<LatLng>> _landmasses = [
-    // Malay Peninsula (Malaysia + Thailand south)
-    [
-      const LatLng(5.5, 101.0), const LatLng(5.0, 100.5),
-      const LatLng(4.5, 100.5), const LatLng(3.8, 100.8),
-      const LatLng(2.8, 101.5), const LatLng(2.0, 102.0),
-      const LatLng(1.4, 103.5), const LatLng(1.2, 103.7),
-      const LatLng(1.7, 104.0), const LatLng(2.4, 104.2),
-      const LatLng(3.0, 103.5), const LatLng(3.6, 103.3),
-      const LatLng(4.5, 103.5), const LatLng(5.2, 103.0),
-      const LatLng(5.5, 102.5), const LatLng(5.5, 101.0),
-    ],
-    // Sumatra (long island)
-    [
-      const LatLng(5.5, 95.0), const LatLng(4.0, 96.0),
-      const LatLng(2.5, 97.5), const LatLng(1.0, 98.5),
-      const LatLng(0.0, 99.5), const LatLng(-1.0, 100.5),
-      const LatLng(-2.0, 101.0), const LatLng(-3.5, 101.5),
-      const LatLng(-5.0, 102.0), const LatLng(-6.0, 102.5),
-      const LatLng(-5.8, 104.0), const LatLng(-4.5, 105.5),
-      const LatLng(-3.0, 106.0), const LatLng(-2.0, 105.5),
-      const LatLng(-0.5, 105.0), const LatLng(0.5, 104.5),
-      const LatLng(1.5, 104.0), const LatLng(2.5, 102.0),
-      const LatLng(3.5, 101.0), const LatLng(4.5, 100.0),
-      const LatLng(5.5, 99.0), const LatLng(5.5, 95.0),
-    ],
-    // Java
-    [
-      const LatLng(-6.0, 105.0), const LatLng(-6.5, 105.5),
-      const LatLng(-7.0, 106.0), const LatLng(-7.5, 106.5),
-      const LatLng(-8.0, 107.0), const LatLng(-8.0, 108.0),
-      const LatLng(-7.5, 109.0), const LatLng(-7.0, 110.0),
-      const LatLng(-6.5, 111.0), const LatLng(-6.0, 112.0),
-      const LatLng(-6.0, 114.0), const LatLng(-7.0, 114.0),
-      const LatLng(-7.5, 113.0), const LatLng(-7.5, 111.5),
-      const LatLng(-7.0, 110.0), const LatLng(-6.5, 108.5),
-      const LatLng(-6.0, 107.5), const LatLng(-6.0, 105.0),
-    ],
-    // Borneo
-    [
-      const LatLng(7.0, 117.0), const LatLng(5.0, 118.0),
-      const LatLng(3.0, 118.5), const LatLng(1.0, 118.0),
-      const LatLng(-1.0, 117.0), const LatLng(-3.0, 116.0),
-      const LatLng(-4.0, 114.0), const LatLng(-3.5, 112.0),
-      const LatLng(-2.5, 110.0), const LatLng(-1.5, 109.5),
-      const LatLng(0.0, 109.0), const LatLng(1.5, 109.0),
-      const LatLng(3.0, 110.0), const LatLng(4.5, 110.5),
-      const LatLng(5.5, 112.0), const LatLng(7.0, 114.0),
-      const LatLng(7.0, 117.0),
-    ],
-    // Small islands (Riau, Bangka, Belitung)
-    [
-      const LatLng(0.5, 104.0), const LatLng(0.0, 105.0),
-      const LatLng(-0.5, 105.5), const LatLng(-1.5, 105.0),
-      const LatLng(-1.5, 104.0), const LatLng(-0.5, 103.5),
-      const LatLng(0.5, 104.0),
-    ],
-    [
-      const LatLng(-2.5, 105.0), const LatLng(-3.0, 106.0),
-      const LatLng(-3.5, 106.0), const LatLng(-3.5, 105.0),
-      const LatLng(-2.5, 105.0),
-    ],
-  ];
-
-  // City labels and their pixel positions will be drawn on top of the map.
-  static const _cities = [
-    ('Kuala Lumpur', 3.139, 101.6869, 'Origin'),
-    ('Singapore', 1.3521, 103.8198, 'Current'),
-    ('Jakarta', -6.2088, 106.8456, 'Destination'),
-    ('Johor Bahru', 1.4927, 103.7414, null),
-    ('Batam', 1.0456, 104.0305, null),
-    ('Palembang', -2.9761, 104.7754, null),
-    ('Bandung', -6.9175, 107.6191, null),
-    ('Surabaya', -7.2575, 112.7521, null),
-    ('Medan', 3.5952, 98.6722, null),
-    ('Pekanbaru', 0.5071, 101.4478, null),
-    ('Padang', -0.9471, 100.4172, null),
-  ];
-
-  // Major highways in the region.
-  static const _highways = <List<LatLng>>[
-    // North-South highway on the Malay peninsula
-    [LatLng(5.5, 100.5), LatLng(4.5, 101.0), LatLng(3.5, 101.5),
-     LatLng(2.7, 101.9), LatLng(1.7, 103.0), LatLng(1.3, 103.7)],
-    // East-West on Java
-    [LatLng(-6.2, 106.8), LatLng(-6.9, 107.6), LatLng(-7.0, 110.0),
-     LatLng(-7.2, 112.5)],
-  ];
-
-  // Convert lat/lng to canvas position with mercator-ish projection.
-  Offset _project(LatLng p, Size size) {
-    final x = (p.longitude - _boundsW) / (_boundsE - _boundsW) * size.width;
-    final y = (_boundsN - p.latitude) / (_boundsN - _boundsS) * size.height;
-    return Offset(x, y);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // ── Ocean gradient base ───────────────────────────────
-    final oceanRect = Offset.zero & size;
-    final oceanPaint = Paint()
-      ..shader = const RadialGradient(
-        center: Alignment(0, 0.3),
-        radius: 1.4,
-        colors: [Color(0xFF0A1F35), Color(0xFF050D1A), Color(0xFF02060F)],
-        stops: [0.0, 0.7, 1.0],
-      ).createShader(oceanRect);
-    canvas.drawRect(oceanRect, oceanPaint);
-
-    // ── Subtle grid lines (lat/lng) ──────────────────────
-    final gridPaint = Paint()
-      ..color = const Color(0xFF1A3A5C).withValues(alpha: 0.18)
-      ..strokeWidth = 0.5
-      ..style = PaintingStyle.stroke;
-    for (var lng = 100.0; lng <= 108.0; lng += 2) {
-      final x = (lng - _boundsW) / (_boundsE - _boundsW) * size.width;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (var lat = 5.0; lat >= -7.0; lat -= 2) {
-      final y = (_boundsN - lat) / (_boundsN - _boundsS) * size.height;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    // ── Landmasses ────────────────────────────────────────
-    final landPaint = Paint()
-      ..color = const Color(0xFF1B2838)
-      ..style = PaintingStyle.fill;
-    final landStroke = Paint()
-      ..color = const Color(0xFF2A4A6C)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-
-    for (final land in _landmasses) {
-      final path = ui.Path();
-      final pts = land.map((p) => _project(p, size)).toList();
-      path.moveTo(pts.first.dx, pts.first.dy);
-      for (final p in pts.skip(1)) {
-        path.lineTo(p.dx, p.dy);
-      }
-      path.close();
-      canvas.drawPath(path, landPaint);
-      canvas.drawPath(path, landStroke);
-    }
-
-    // ── Highways ──────────────────────────────────────────
-    final highwayPaint = Paint()
-      ..color = const Color(0xFFFFC845).withValues(alpha: 0.35)
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    for (final hwy in _highways) {
-      final path = ui.Path();
-      final pts = hwy.map((p) => _project(p, size)).toList();
-      path.moveTo(pts.first.dx, pts.first.dy);
-      for (final p in pts.skip(1)) {
-        path.lineTo(p.dx, p.dy);
-      }
-      canvas.drawPath(path, highwayPaint);
-    }
-
-    // ── Compass rose (top right corner) ──────────────────
-    _drawCompass(canvas, Offset(size.width - 50, 60));
-
-    // ── Scale bar (bottom left) ──────────────────────────
-    _drawScaleBar(canvas, Offset(20, size.height - 240), size);
-
-    // ── Route line — glow halo + bright centre ───────────
-    final routePoints = route.map((p) => _project(p, size)).toList();
-    final routePath = ui.Path();
-    routePath.moveTo(routePoints.first.dx, routePoints.first.dy);
-    for (final p in routePoints.skip(1)) {
-      routePath.lineTo(p.dx, p.dy);
-    }
-
-    final routeHalo = Paint()
-      ..color = const Color(0xFFFF453A).withValues(alpha: 0.30)
-      ..strokeWidth = 16
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawPath(routePath, routeHalo);
-
-    final routeLine = Paint()
-      ..color = const Color(0xFFFF453A)
-      ..strokeWidth = 4.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawPath(routePath, routeLine);
-
-    // Animated dashed overlay (drawn fresh — animation tick on repaint).
-    // The painter doesn't run an animation but we draw a subtle dash pattern.
-    final routeDash = Paint()
-      ..color = Colors.white.withValues(alpha: 0.4)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    for (var i = 0; i < routePoints.length - 1; i++) {
-      final p1 = routePoints[i];
-      final p2 = routePoints[i + 1];
-      // Draw short white tick every 60px along route
-      final dx = p2.dx - p1.dx;
-      final dy = p2.dy - p1.dy;
-      final dist = math.sqrt(dx * dx + dy * dy);
-      final ux = dx / dist;
-      final uy = dy / dist;
-      // Perpendicular for tick
-      final px = -uy;
-      final py = ux;
-      for (var t = 0.0; t < dist; t += 24) {
-        final cx = p1.dx + ux * t;
-        final cy = p1.dy + uy * t;
-        canvas.drawLine(
-          Offset(cx + px * 6, cy + py * 6),
-          Offset(cx - px * 6, cy - py * 6),
-          routeDash,
-        );
-      }
-    }
-
-    // ── City labels ──────────────────────────────────────
-    for (final city in _cities) {
-      final p = _project(LatLng(city.$2, city.$3), size);
-      // Label dot
-      final isKey = city.$4 != null;
-      final dotColor = isKey
-          ? (city.$4 == 'Origin'
-              ? const Color(0xFF10B981)
-              : city.$4 == 'Current'
-                  ? const Color(0xFFFF453A)
-                  : const Color(0xFF60A5FA))
-          : const Color(0xFF7C8A9A);
-      final dotSize = isKey ? 5.0 : 3.0;
-      canvas.drawCircle(
-          p, dotSize, Paint()..color = dotColor.withValues(alpha: 0.4));
-      canvas.drawCircle(p, dotSize * 0.55, Paint()..color = dotColor);
-
-      // Label text
-      final tp = TextPainter(
-        text: TextSpan(
-          text: city.$1,
-          style: TextStyle(
-            color: isKey ? Colors.white : const Color(0xFF9AB0C5),
-            fontSize: isKey ? 11 : 9,
-            fontWeight: isKey ? FontWeight.w700 : FontWeight.w500,
-            letterSpacing: 0.2,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final lx = p.dx + 7;
-      final ly = p.dy - tp.height / 2;
-      // Halo
-      tp.paint(canvas, Offset(lx, ly));
-    }
-
-    // ── Origin marker (green warehouse) ──────────────────
-    _drawMarker(
-      canvas,
-      _project(origin, size),
-      const Color(0xFF10B981),
-      Icons.warehouse_rounded,
-      isKey: true,
-    );
-
-    // ── Current position marker (red pulse — static
-    //    representation, the animation runs in the Stack) ─
-    _drawCurrentMarker(canvas, _project(current, size));
-
-    // ── Destination marker (white/blue location pin) ────
-    _drawMarker(
-      canvas,
-      _project(destination, size),
-      const Color(0xFF60A5FA),
-      Icons.location_on_rounded,
-      isKey: true,
-    );
-  }
-
-  void _drawCurrentMarker(Canvas canvas, Offset p) {
-    // Outer halo
-    canvas.drawCircle(
-        p,
-        22,
-        Paint()
-          ..color = const Color(0xFFFF453A).withValues(alpha: 0.18)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
-    // Mid ring
-    canvas.drawCircle(p, 14,
-        Paint()..color = const Color(0xFFFF453A).withValues(alpha: 0.45));
-    // Truck body
-    canvas.drawCircle(p, 9, Paint()..color = const Color(0xFFFF453A));
-    canvas.drawCircle(
-        p,
-        9,
-        Paint()
-          ..color = Colors.white
-          ..strokeWidth = 2.5
-          ..style = PaintingStyle.stroke);
-    // Truck icon
-    final tp = TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(Icons.local_shipping_rounded.codePoint),
-        style: TextStyle(
-            color: Colors.white,
-            fontSize: 10,
-            fontFamily: Icons.local_shipping_rounded.fontFamily,
-            package: Icons.local_shipping_rounded.fontPackage),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(p.dx - tp.width / 2, p.dy - tp.height / 2));
-  }
-
-  void _drawCompass(Canvas canvas, Offset center) {
-    final p = Paint()
-      ..color = const Color(0xFF1B2838).withValues(alpha: 0.85)
-      ..style = PaintingStyle.fill;
-    final stroke = Paint()
-      ..color = const Color(0xFF2A4A6C)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-    canvas.drawCircle(center, 22, p);
-    canvas.drawCircle(center, 22, stroke);
-    // N arrow
-    final tp = TextPainter(
-      text: TextSpan(
-        text: 'N',
-        style: TextStyle(
-            color: Colors.white,
-            fontSize: 9,
-            fontWeight: FontWeight.w800),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - 18));
-    // South dot
-    canvas.drawCircle(Offset(center.dx, center.dy + 14),
-        1.5, Paint()..color = const Color(0xFF7C8A9A));
-  }
-
-  void _drawScaleBar(Canvas canvas, Offset pos, Size size) {
-    final barWidth = 80.0;
-    final p = Paint()..color = Colors.white.withValues(alpha: 0.6);
-    canvas.drawLine(pos, Offset(pos.dx + barWidth, pos.dy),
-        p..strokeWidth = 2);
-    // 100 km at zoom 5 ≈ 80px
-    final tp = TextPainter(
-      text: TextSpan(
-        text: '100 km',
-        style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
-            fontSize: 9,
-            fontWeight: FontWeight.w600),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(pos.dx, pos.dy - 14));
-  }
-
-  void _drawMarker(Canvas canvas, Offset p, Color color, IconData icon,
-      {bool isKey = false}) {
-    if (!isKey) return;
-    final outerR = isKey ? 14.0 : 10.0;
-    final innerR = isKey ? 9.0 : 6.0;
-    canvas.drawCircle(
-        p,
-        outerR,
-        Paint()
-          ..color = color.withValues(alpha: 0.30)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
-    canvas.drawCircle(p, outerR * 0.7, Paint()..color = color);
-    canvas.drawCircle(p, outerR * 0.7,
-        Paint()
-          ..color = Colors.white
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke);
-
-    final tp = TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: isKey ? 10 : 8,
-          fontFamily: icon.fontFamily,
-          package: icon.fontPackage,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas,
-        Offset(p.dx - tp.width / 2, p.dy - tp.height / 2));
-  }
-
-  @override
-  bool shouldRepaint(covariant _DarkMapPainter oldDelegate) =>
-      oldDelegate.zoom != zoom;
-}
-
-// ── Pulse pin (animated, current position) ────────────────────────
-
-class _PulsePin extends StatefulWidget {
-  final Offset position;
-  const _PulsePin({required this.position});
-  @override
-  State<_PulsePin> createState() => _PulsePinState();
-}
-
-class _PulsePinState extends State<_PulsePin>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1800))
-    ..repeat();
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) {
-        return CustomPaint(
-          size: const Size(80, 80),
-          painter: _PulsePinPainter(progress: _c.value),
-        );
-      },
-    );
-  }
-}
-
-class _PulsePinPainter extends CustomPainter {
-  final double progress;
-  _PulsePinPainter({required this.progress});
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    // Pulse rings
-    for (var i = 0; i < 3; i++) {
-      final t = ((progress + i / 3) % 1.0);
-      final r = 10 + t * 30;
-      final p = Paint()
-        ..color = const Color(0xFFFF453A).withValues(alpha: 0.45 * (1 - t))
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(center, r, p);
-    }
-    // Truck body
-    final body = Paint()..color = const Color(0xFFFF453A);
-    canvas.drawCircle(center, 11, body);
-    canvas.drawCircle(
-        center, 11, Paint()..color = Colors.white..strokeWidth = 2.5..style = PaintingStyle.stroke);
-    // Truck icon
-    final tp = TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(Icons.local_shipping_rounded.codePoint),
-        style: TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontFamily: Icons.local_shipping_rounded.fontFamily,
-            package: Icons.local_shipping_rounded.fontPackage),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
-  }
-
-  @override
-  bool shouldRepaint(covariant _PulsePinPainter oldDelegate) =>
-      oldDelegate.progress != progress;
-}
-
-// ── Glass primitives ──────────────────────────────────────────────
-
-class _GlassButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final double size;
-  final bool active;
-  const _GlassButton({
-    required this.icon,
-    required this.onTap,
-    this.size = 44,
-    this.active = false,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return ClipOval(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: active
-                    ? AppColors.brand
-                    : Colors.black.withValues(alpha: 0.50),
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.20), width: 0.6),
-                boxShadow: active
-                    ? [
-                        BoxShadow(
-                            color: AppColors.brand.withValues(alpha: 0.5),
-                            blurRadius: 14,
-                            spreadRadius: 1),
-                      ]
-                    : null,
-              ),
-              child: Icon(icon, color: Colors.white, size: 20),
+          // ── Hold banner (admin can set from admin app) ──────────
+          if (_simHoldReason != null)
+            Positioned(
+              left: 12, right: 80, top: MediaQuery.of(context).padding.top + 80,
+              child: _HoldBanner(reason: _simHoldReason!),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LiveStatusPill extends StatelessWidget {
-  const _LiveStatusPill();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.success,
-        borderRadius: BorderRadius.circular(99),
-        boxShadow: [
-          BoxShadow(
-              color: AppColors.success.withValues(alpha: 0.5),
-              blurRadius: 16,
-              spreadRadius: 1),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-                color: Colors.white, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          const Text('LIVE · Last update 2s ago',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3)),
         ],
       ),
     );
   }
 }
 
-class _CompactStatsBar extends StatelessWidget {
-  const _CompactStatsBar();
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.55),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-          ),
-          child: Row(
-            children: const [
-              _StatPill(label: 'ETA', value: '5:42', color: Color(0xFFFFD60A)),
-              _StatDivider(),
-              _StatPill(label: 'DIST', value: '12.4km', color: Color(0xFF0A84FF)),
-              _StatDivider(),
-              _StatPill(label: 'SPEED', value: '38km/h', color: Color(0xFF30D158)),
-              _StatDivider(),
-              _StatPill(label: 'BAT', value: '87%', color: Color(0xFF30D158)),
-              _StatDivider(),
-              _StatPill(label: 'ALT', value: '42m', color: AppColors.brand),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatDivider extends StatelessWidget {
-  const _StatDivider();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 28,
-      color: Colors.white.withValues(alpha: 0.12),
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-    );
-  }
-}
-
-class _StatPill extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  const _StatPill({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label,
-              style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 8.5,
-                  letterSpacing: 0.4,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 1),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 5,
-                height: 5,
-                decoration: BoxDecoration(
-                    color: color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 4),
-              Text(value,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LiveDashboard extends StatelessWidget {
+class _GlassBar extends StatelessWidget {
   final String tracking;
-  const _LiveDashboard({required this.tracking});
+  final VoidCallback onBack;
+  final VoidCallback onClose;
+  const _GlassBar({required this.tracking, required this.onBack, required this.onClose});
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 20,
-              offset: const Offset(0, 8)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.info,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: const Text('Out for delivery',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800)),
-              ),
-              const Spacer(),
-              const Icon(Icons.refresh_rounded,
-                  color: Colors.white60, size: 14),
-              const SizedBox(width: 4),
-              const Text('2s',
-                  style: TextStyle(
-                      color: Colors.white60,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: const [
-              _DashboardCell(
-                  label: 'ETA',
-                  value: '5:42',
-                  sub: 'PM',
-                  color: AppColors.warning),
-              SizedBox(width: 8),
-              _DashboardCell(
-                  label: 'Distance',
-                  value: '12.4',
-                  sub: 'km',
-                  color: AppColors.info),
-              SizedBox(width: 8),
-              _DashboardCell(
-                  label: 'Speed',
-                  value: '38',
-                  sub: 'km/h',
-                  color: AppColors.success),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: const [
-              _DashboardCell(
-                  label: 'Altitude',
-                  value: '42',
-                  sub: 'm',
-                  color: AppColors.accent),
-              SizedBox(width: 8),
-              _DashboardCell(
-                  label: 'Bearing',
-                  value: 'NE',
-                  sub: '37°',
-                  color: AppColors.warning),
-              SizedBox(width: 8),
-              _DashboardCell(
-                  label: 'Battery',
-                  value: '87',
-                  sub: '%',
-                  color: AppColors.success),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashboardCell extends StatelessWidget {
-  final String label;
-  final String value;
-  final String sub;
-  final Color color;
-  const _DashboardCell({
-    required this.label,
-    required this.value,
-    required this.sub,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
+    return Row(
+      children: [
+        _GlassIconButton(icon: Icons.arrow_back_ios_new_rounded, onTap: onBack),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            ),
+            child: Row(
               children: [
                 Container(
-                  width: 6,
-                  height: 6,
-                  decoration:
-                      BoxDecoration(color: color, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 4),
-                Text(label,
-                    style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 9.5,
-                        letterSpacing: 0.3,
-                        fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(value,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3)),
-                const SizedBox(width: 2),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 1),
-                  child: Text(sub,
-                      style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w600)),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomShipmentSheet extends StatefulWidget {
-  final String tracking;
-  const _BottomShipmentSheet({required this.tracking});
-  @override
-  State<_BottomShipmentSheet> createState() => _BottomShipmentSheetState();
-}
-
-class _BottomShipmentSheetState extends State<_BottomShipmentSheet> {
-  bool _expanded = false;
-  @override
-  Widget build(BuildContext context) {
-    final t = widget.tracking;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.0),
-            Colors.black.withValues(alpha: _expanded ? 0.92 : 0.78),
-          ],
-          stops: const [0.0, 0.18],
-        ),
-      ),
-      padding: EdgeInsets.fromLTRB(
-          0, 12, 0, MediaQuery.of(context).padding.bottom + 8),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 14),
-        padding: EdgeInsets.all(_expanded ? 16 : 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: _expanded ? 0.08 : 0.07),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Tap-to-expand header
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: Column(
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Shipment ${t.substring(0, 12)}…',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.3)),
-                            const SizedBox(height: 2),
-                            const Text('Petaling Jaya · 6.2 km from you',
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 11.5)),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.success.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: const Text('On time',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w800)),
-                      ),
-                      const SizedBox(width: 6),
-                      AnimatedRotation(
-                        turns: _expanded ? 0.5 : 0,
-                        duration: const Duration(milliseconds: 220),
-                        child: Icon(Icons.expand_more_rounded,
-                            color: Colors.white60, size: 18),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (_expanded) ...[
-              const SizedBox(height: 14),
-              const _MiniTimeline(),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SheetAction(
-                      icon: Icons.phone_rounded,
-                      label: 'Call driver',
-                      onTap: () {},
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SheetAction(
-                      icon: Icons.notifications_active_rounded,
-                      label: 'Notify me',
-                      onTap: () {},
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SheetAction(
-                      icon: Icons.share_rounded,
-                      label: 'Share',
-                      onTap: () {},
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniTimeline extends StatelessWidget {
-  const _MiniTimeline();
-  @override
-  Widget build(BuildContext context) {
-    final events = [
-      ('Out for delivery', '3:42 PM', AppColors.success),
-      ('Arrived at hub', '11:15 AM', AppColors.success),
-      ('In transit', 'Jul 2', AppColors.success),
-      ('Picked up', 'Jul 1', AppColors.success),
-      ('Created', 'Jun 30', AppColors.success),
-    ];
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < events.length; i++)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    margin: const EdgeInsets.only(top: 4),
-                    decoration: BoxDecoration(
-                        color: events[i].$3, shape: BoxShape.circle),
-                  ),
-                  if (i < events.length - 1)
-                    Container(
-                      width: 1.5,
-                      height: 22,
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                      color: Colors.white.withValues(alpha: 0.20),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Text(events[i].$1,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600)),
-                      const Spacer(),
-                      Text(events[i].$2,
-                          style: const TextStyle(
-                              color: Colors.white60,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600)),
+                  width: 8, height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(color: AppColors.success, blurRadius: 8, spreadRadius: 1),
                     ],
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Live · ${tracking.length > 14 ? tracking.substring(tracking.length - 12) : tracking}',
+                          style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+                      Text('Updated just now · 4s',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+        const SizedBox(width: 10),
+        _GlassIconButton(icon: Icons.close_rounded, onTap: onClose),
       ],
     );
   }
 }
 
-class _SheetAction extends StatelessWidget {
+class _GlassIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _GlassIconButton({required this.icon, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () { HapticService.selection(); onTap(); },
+      child: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.45),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Icon(icon, color: Colors.white, size: 16),
+      ),
+    );
+  }
+}
+
+class _MapButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool active;
+  const _MapButton({required this.icon, required this.onTap, this.active = false});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(
+          color: active ? AppColors.brand : Colors.black.withValues(alpha: 0.55),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          boxShadow: active ? [BoxShadow(color: AppColors.brand.withValues(alpha: 0.4), blurRadius: 12)] : null,
+        ),
+        child: Icon(icon, color: Colors.white, size: 18),
+      ),
+    );
+  }
+}
+
+class _LiveTelemetryCard extends StatefulWidget {
+  final double progress;
+  final double speed;
+  final int battery;
+  final double altitude;
+  final double distanceKm;
+  final Duration eta;
+  final String? holdReason;
+  final String tracking;
+  final Offset origin;
+  final Offset present;
+  final Offset destination;
+  final VoidCallback onShare;
+  final VoidCallback onSupport;
+  const _LiveTelemetryCard({
+    required this.progress,
+    required this.speed,
+    required this.battery,
+    required this.altitude,
+    required this.distanceKm,
+    required this.eta,
+    required this.holdReason,
+    required this.tracking,
+    required this.origin,
+    required this.present,
+    required this.destination,
+    required this.onShare,
+    required this.onSupport,
+  });
+  @override
+  State<_LiveTelemetryCard> createState() => _LiveTelemetryCardState();
+}
+
+class _LiveTelemetryCardState extends State<_LiveTelemetryCard> {
+  bool _expanded = false;
+
+  String _fmtDur(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(_expanded ? 28 : 22)),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              child: Column(
+                children: [
+                  // Handle
+                  Center(
+                    child: Container(
+                      width: 36, height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Status + progress
+                  Row(
+                    children: [
+                      Container(
+                        width: 12, height: 12,
+                        decoration: BoxDecoration(
+                          color: widget.holdReason != null ? AppColors.warning : AppColors.success,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (widget.holdReason != null ? AppColors.warning : AppColors.success).withValues(alpha: 0.6),
+                              blurRadius: 8, spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.holdReason != null
+                                  ? 'On hold · ${widget.holdReason}'
+                                  : 'In transit · arriving in ${_fmtDur(widget.eta)}',
+                              style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              widget.holdReason != null
+                                  ? 'Operator is resolving this with you'
+                                  : 'Customs cleared · out for linehaul',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        _expanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Progress bar
+                  Stack(
+                    children: [
+                      Container(
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                      FractionallySizedBox(
+                        widthFactor: widget.progress,
+                        child: Container(
+                          height: 6,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [AppColors.brand, AppColors.warning],
+                            ),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Stat row
+                  Row(
+                    children: [
+                      Expanded(child: _Stat(label: 'ETA', value: _fmtDur(widget.eta), color: AppColors.brand)),
+                      _StatDivider(),
+                      Expanded(child: _Stat(label: 'Distance', value: '${widget.distanceKm.toStringAsFixed(1)} km', color: AppColors.info)),
+                      _StatDivider(),
+                      Expanded(child: _Stat(label: 'Speed', value: '${widget.speed.toStringAsFixed(0)} km/h', color: AppColors.success)),
+                      _StatDivider(),
+                      Expanded(child: _Stat(label: 'Battery', value: '${widget.battery}%', color: widget.battery > 60 ? AppColors.success : AppColors.warning)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Expanded content
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(height: 0.5, color: Colors.white.withValues(alpha: 0.10)),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.share_rounded,
+                          label: 'Share',
+                          onTap: widget.onShare,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.support_agent_rounded,
+                          label: 'Support',
+                          onTap: widget.onSupport,
+                          primary: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('RECENT EVENTS', style: TextStyle(color: Colors.white54, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+                  const SizedBox(height: 8),
+                  _EventLine(
+                    title: 'Departed Jakarta hub',
+                    time: '2 min ago',
+                    icon: Icons.flight_takeoff_rounded,
+                    color: AppColors.info,
+                  ),
+                  _EventLine(
+                    title: 'Customs cleared',
+                    time: '1 hr ago',
+                    icon: Icons.gavel_rounded,
+                    color: AppColors.success,
+                  ),
+                  _EventLine(
+                    title: 'Loaded onto LH-203',
+                    time: '4 hr ago',
+                    icon: Icons.inventory_2_rounded,
+                    color: AppColors.brand,
+                  ),
+                  _EventLine(
+                    title: 'Picked up in Kuala Lumpur',
+                    time: 'yesterday',
+                    icon: Icons.local_shipping_rounded,
+                    color: AppColors.warning,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _Stat({required this.label, required this.value, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w800)),
+        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+      ],
+    );
+  }
+}
+
+class _StatDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 0.5, height: 22, color: Colors.white.withValues(alpha: 0.15));
+  }
+}
+
+class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _SheetAction(
-      {required this.icon, required this.label, required this.onTap});
+  final bool primary;
+  const _ActionButton({required this.icon, required this.label, required this.onTap, this.primary = false});
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 18),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700)),
-            ],
-          ),
+    return GestureDetector(
+      onTap: () { HapticService.selection(); onTap(); },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: primary ? AppColors.brand : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+          ],
         ),
       ),
     );
   }
+}
+
+class _EventLine extends StatelessWidget {
+  final String title;
+  final String time;
+  final IconData icon;
+  final Color color;
+  const _EventLine({required this.title, required this.time, required this.icon, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 24, height: 24,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.18), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 13),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700))),
+          Text(time, style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 11, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+class _HoldBanner extends StatelessWidget {
+  final String reason;
+  const _HoldBanner({required this.reason});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Hold applied by AirPak Ops: $reason',
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Custom painter for the Snapchat-style map ────────────────────────
+
+class _SnapMapPainter extends CustomPainter {
+  final double progress;
+  final int pulseTick;
+  final Offset Function(Offset) toCanvas;
+  final Offset Function(double) routeAt;
+  final bool isDark;
+  _SnapMapPainter({
+    required this.progress,
+    required this.pulseTick,
+    required this.toCanvas,
+    required this.routeAt,
+    required this.isDark,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Background — soft midnight blue
+    final bg = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF0B1220), Color(0xFF1A1F2E), Color(0xFF0E1320)],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, bg);
+
+    // Subtle lat/lng grid
+    final grid = Paint()
+      ..color = const Color(0xFF2A3142).withValues(alpha: 0.45)
+      ..strokeWidth = 0.4;
+    for (int i = 0; i <= 10; i++) {
+      final x = i * size.width / 10;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
+    }
+    for (int i = 0; i <= 8; i++) {
+      final y = i * size.height / 8;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+
+    // Land masses (rough outlines of Malay Peninsula, Sumatra, Borneo, Java)
+    _drawLandMass(canvas, size, [
+      // Malay Peninsula (slim diagonal)
+      Offset(0.55, 0.05), Offset(0.62, 0.10), Offset(0.60, 0.20),
+      Offset(0.58, 0.32), Offset(0.55, 0.45), Offset(0.56, 0.55),
+      Offset(0.58, 0.62), Offset(0.61, 0.70), Offset(0.62, 0.78),
+    ], const Color(0xFF1E2A3A));
+    // Sumatra (long diagonal island)
+    _drawLandMass(canvas, size, [
+      Offset(0.50, 0.62), Offset(0.53, 0.68), Offset(0.60, 0.74),
+      Offset(0.68, 0.78), Offset(0.74, 0.83), Offset(0.78, 0.88),
+      Offset(0.76, 0.92), Offset(0.70, 0.90), Offset(0.62, 0.86),
+      Offset(0.55, 0.80), Offset(0.50, 0.72),
+    ], const Color(0xFF1E2A3A));
+    // Borneo (round blob top-right)
+    _drawLandMass(canvas, size, [
+      Offset(0.78, 0.32), Offset(0.85, 0.30), Offset(0.90, 0.34),
+      Offset(0.92, 0.42), Offset(0.90, 0.50), Offset(0.85, 0.54),
+      Offset(0.78, 0.50), Offset(0.74, 0.42),
+    ], const Color(0xFF1E2A3A));
+    // Java (long thin bottom)
+    _drawLandMass(canvas, size, [
+      Offset(0.62, 0.90), Offset(0.70, 0.92), Offset(0.78, 0.94),
+      Offset(0.84, 0.96), Offset(0.88, 0.98), Offset(0.84, 0.99),
+      Offset(0.76, 0.98), Offset(0.68, 0.96), Offset(0.62, 0.94),
+    ], const Color(0xFF1E2A3A));
+
+    // City labels (faint)
+    _drawCityLabel(canvas, size, 'KUALA LUMPUR', 0.55, 0.30, const Color(0xFF8FA0BD));
+    _drawCityLabel(canvas, size, 'SINGAPORE',   0.59, 0.62, const Color(0xFF8FA0BD));
+    _drawCityLabel(canvas, size, 'JAKARTA',     0.78, 0.94, const Color(0xFF8FA0BD));
+    _drawCityLabel(canvas, size, 'Kuching',     0.84, 0.46, const Color(0xFF6E7E99));
+    _drawCityLabel(canvas, size, 'Medan',       0.55, 0.74, const Color(0xFF6E7E99));
+
+    // Route line — origin → present → destination
+    final routePts = <Offset>[];
+    for (int i = 0; i <= 100; i++) {
+      routePts.add(routeAt(i / 100));
+    }
+    // Background grey line (full route)
+    final routePath = Path()..moveTo(routePts.first.dx, routePts.first.dy);
+    for (int i = 1; i < routePts.length; i++) {
+      routePath.lineTo(routePts[i].dx, routePts[i].dy);
+    }
+    final greyPaint = Paint()
+      ..color = const Color(0xFF3B475E)
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(routePath, greyPaint);
+
+    // Active portion (gradient) — up to progress
+    final activePath = Path()..moveTo(routePts.first.dx, routePts.first.dy);
+    final endIdx = (routePts.length * progress).floor().clamp(1, routePts.length - 1);
+    for (int i = 1; i <= endIdx; i++) {
+      activePath.lineTo(routePts[i].dx, routePts[i].dy);
+    }
+    final activePaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [AppColors.brand, AppColors.warning],
+      ).createShader(Rect.fromPoints(routePts.first, routePts[endIdx]))
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(activePath, activePaint);
+
+    // Dashed forecast line (progress → 1)
+    if (progress < 0.95) {
+      final dashPath = Path()..moveTo(routePts[endIdx].dx, routePts[endIdx].dy);
+      for (int i = endIdx + 1; i < routePts.length; i++) {
+        dashPath.lineTo(routePts[i].dx, routePts[i].dy);
+      }
+      _drawDashed(canvas, dashPath, const Color(0xFF56607A), 2.5, 6, 4);
+    }
+
+    // Origin pin
+    final origin = routeAt(0);
+    _drawPin(canvas, origin, const Color(0xFF22C55E), Icons.circle_rounded, 'Origin');
+    // Destination pin
+    final dest = routeAt(1);
+    _drawPin(canvas, dest, const Color(0xFFEF4444), Icons.location_on_rounded, 'Destination');
+    // Current courier position — pulsing dot
+    final present = routeAt(progress);
+    _drawPulseDot(canvas, present, pulseTick);
+  }
+
+  void _drawLandMass(Canvas canvas, Size size, List<Offset> points, Color color) {
+    final p = Path();
+    if (points.isEmpty) return;
+    p.moveTo(points.first.dx * size.width, points.first.dy * size.height);
+    for (int i = 1; i < points.length; i++) {
+      p.lineTo(points[i].dx * size.width, points[i].dy * size.height);
+    }
+    p.close();
+    final paint = Paint()..color = color;
+    canvas.drawPath(p, paint);
+    // Stroke for definition
+    final stroke = Paint()
+      ..color = const Color(0xFF2F3A4E)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    canvas.drawPath(p, stroke);
+  }
+
+  void _drawCityLabel(Canvas canvas, Size size, String text, double x, double y, Color color) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.4),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(x * size.width, y * size.height));
+  }
+
+  void _drawPin(Canvas canvas, Offset c, Color color, IconData icon, String label) {
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawCircle(c, 10, shadow);
+    final paint = Paint()..color = color;
+    canvas.drawCircle(c, 7, paint);
+    final ring = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(c, 7, ring);
+  }
+
+  void _drawPulseDot(Canvas canvas, Offset c, int tick) {
+    final pulse = ((tick % 4) / 4.0);
+    // Outer pulse ring
+    final pulseRadius = 14 + pulse * 22;
+    final pulsePaint = Paint()
+      ..color = AppColors.brand.withValues(alpha: (1 - pulse) * 0.55)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(c, pulseRadius, pulsePaint);
+    // Inner solid dot
+    final coreShadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.45)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+    canvas.drawCircle(c, 11, coreShadow);
+    final core = Paint()..color = AppColors.brand;
+    canvas.drawCircle(c, 9, core);
+    final ring = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(c, 9, ring);
+    // Crosshair
+    final cross = Paint()
+      ..color = Colors.white.withValues(alpha: 0.6)
+      ..strokeWidth = 1.4;
+    canvas.drawLine(Offset(c.dx - 14, c.dy), Offset(c.dx - 6, c.dy), cross);
+    canvas.drawLine(Offset(c.dx + 6, c.dy), Offset(c.dx + 14, c.dy), cross);
+    canvas.drawLine(Offset(c.dx, c.dy - 14), Offset(c.dx, c.dy - 6), cross);
+    canvas.drawLine(Offset(c.dx, c.dy + 6), Offset(c.dx, c.dy + 14), cross);
+  }
+
+  void _drawDashed(Canvas canvas, Path path, Color color, double width, double dash, double gap) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    for (final metric in path.computeMetrics()) {
+      double dist = 0;
+      bool on = true;
+      while (dist < metric.length) {
+        final next = math.min(dist + (on ? dash : gap), metric.length);
+        if (on) {
+          canvas.drawPath(metric.extractPath(dist, next), paint);
+        }
+        dist = next;
+        on = !on;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SnapMapPainter old) =>
+      old.progress != progress || old.pulseTick != pulseTick;
 }

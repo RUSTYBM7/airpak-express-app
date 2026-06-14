@@ -153,6 +153,52 @@ class MockData {
     return shipment;
   }
 
+  /// Admin-only: append a new tracking event. If the status differs
+  /// from the shipment's current status, also updates the shipment.
+  Future<TrackingEvent> appendTrackingEvent({
+    required String shipmentId,
+    required ShipmentStatus status,
+    required String location,
+    String? description,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final idx = _shipments.indexWhere((s) => s.id == shipmentId);
+    if (idx < 0) throw StateError('shipment not found');
+    final ship = _shipments[idx];
+    // Update the shipment status if it changed
+    if (ship.status != status) {
+      _shipments[idx] = Shipment(
+        id: ship.id,
+        trackingNumber: ship.trackingNumber,
+        userId: ship.userId,
+        status: status,
+        service: ship.service,
+        origin: ship.origin,
+        destination: ship.destination,
+        package: ship.package,
+        createdAt: ship.createdAt,
+        estimatedDelivery: ship.estimatedDelivery,
+        deliveredAt: status == ShipmentStatus.delivered ? DateTime.now() : ship.deliveredAt,
+        declaredValue: ship.declaredValue,
+        currency: ship.currency,
+        price: ship.price,
+        labelUrl: ship.labelUrl,
+        invoiceUrl: ship.invoiceUrl,
+        reference: ship.reference,
+      );
+    }
+    final ev = TrackingEvent(
+      id: 'evt_${ship.trackingNumber}_${status.name}_${DateTime.now().millisecondsSinceEpoch}',
+      shipmentId: ship.id,
+      status: status,
+      location: location,
+      description: description,
+      occurredAt: DateTime.now(),
+    );
+    _events.add(ev);
+    return ev;
+  }
+
   Future<Shipment> updateShipmentStatus(String shipmentId, ShipmentStatus next) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     final idx = _shipments.indexWhere((s) => s.id == shipmentId);

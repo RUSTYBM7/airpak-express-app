@@ -13,13 +13,20 @@ class AdminLayout extends ConsumerWidget {
 
   static const _tabs = [
     (AppRoutes.adminPortal, Icons.dashboard_outlined, Icons.dashboard, 'Home'),
+    (AppRoutes.adminShipments, Icons.local_shipping_outlined, Icons.local_shipping, 'Shipments'),
     (AppRoutes.adminUsers, Icons.people_outline, Icons.people, 'Users'),
     (AppRoutes.adminChat, Icons.chat_bubble_outline, Icons.chat_bubble, 'Inbox'),
     (
       AppRoutes.adminAiStudio,
       Icons.auto_awesome_outlined,
       Icons.auto_awesome,
-      'AI'
+      'AI Studio'
+    ),
+    (
+      AppRoutes.adminAiTemplates,
+      Icons.palette_outlined,
+      Icons.palette,
+      'AI Templates'
     ),
     (
       AppRoutes.adminAutomation,

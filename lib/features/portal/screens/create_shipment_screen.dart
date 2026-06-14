@@ -32,7 +32,7 @@ class _CreateShipmentScreenState extends ConsumerState<CreateShipmentScreen> {
   final _declaredValue = TextEditingController(text: '0');
 
   // step 2 — origin
-  final _oName = TextEditingController(text: 'Demo Sender');
+  final _oName = TextEditingController(text: 'Your Name');
   final _oPhone = TextEditingController(text: '+60 12-345 6789');
   final _oLine1 = TextEditingController(text: '12 Jalan Sultan');
   final _oCity = TextEditingController(text: 'Kuala Lumpur');

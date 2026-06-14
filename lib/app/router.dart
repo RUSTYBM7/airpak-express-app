@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/admin/screens/admin_2fa_screen.dart';
 import '../features/admin/screens/admin_ai_studio_screen.dart';
+import '../features/admin/screens/admin_ai_templates_screen.dart';
 import '../features/admin/screens/admin_audit_logs_screen.dart';
 import '../features/admin/screens/admin_automation_screen.dart';
 import '../features/admin/screens/admin_chat_screen.dart';
@@ -15,6 +16,8 @@ import '../features/admin/screens/admin_login_screen.dart';
 import '../features/admin/screens/admin_reset_password_screen.dart';
 import '../features/admin/screens/admin_settings_screen.dart';
 import '../features/admin/screens/admin_shipment_create_screen.dart';
+import '../features/admin/screens/admin_shipments_screen.dart';
+import '../features/admin/screens/admin_tracking_editor_screen.dart';
 import '../features/admin/screens/admin_users_screen.dart';
 import '../features/admin/screens/admin_user_detail_screen.dart';
 import '../features/admin/screens/admin_voice_tools_screen.dart';
@@ -82,12 +85,15 @@ class AppRoutes {
   static const adminChat = '/admin/portal/chat';
   static const adminSettings = '/admin/portal/settings';
   static const adminAiStudio = '/admin/portal/ai-studio';
+  static const adminAiTemplates = '/admin/portal/ai-templates';
   static const adminAutomation = '/admin/portal/automation';
   static const adminDocParser = '/admin/portal/document-parser';
   static const adminVoiceTools = '/admin/portal/voice-tools';
   static const adminAuditLogs = '/admin/portal/audit-logs';
   static const adminWorkflows = '/admin/portal/workflows';
   static const adminAutopilot = '/admin/portal/autopilot';
+  static const adminShipments = '/admin/portal/shipments';
+  static const adminTrackingEditor = '/admin/portal/shipment/tracking';
 }
 
 GoRouter buildRouter(Ref ref) {
@@ -299,6 +305,20 @@ GoRouter buildRouter(Ref ref) {
         path: '/admin/portal/user/:userId',
         builder: (_, st) => AdminUserDetailScreen(
           userId: st.pathParameters['userId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.adminAiTemplates,
+        builder: (_, __) => const AdminAiTemplatesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.adminShipments,
+        builder: (_, __) => const AdminShipmentsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/portal/shipment/:shipmentId/tracking',
+        builder: (_, st) => AdminTrackingEditorScreen(
+          shipmentId: st.pathParameters['shipmentId'] ?? '',
         ),
       ),
       GoRoute(

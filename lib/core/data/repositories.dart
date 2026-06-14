@@ -85,6 +85,44 @@ class ShipmentRepository {
     }
   }
 
+  /// Admin-only: append a new tracking event to a shipment, with an
+  /// optional hold reason. This is the only way the public-facing
+  /// tracking history can change — customers can read it, but
+  /// only admins (via the admin portal) can write to it.
+  Future<RepoResult<TrackingEvent>> appendEvent({
+    required String shipmentId,
+    required ShipmentStatus status,
+    required String location,
+    String? description,
+  }) async {
+    try {
+      if (_useMock) {
+        final ev = await MockData.instance.appendTrackingEvent(
+          shipmentId: shipmentId,
+          status: status,
+          location: location,
+          description: description,
+        );
+        return RepoResult.ok(ev);
+      }
+      final payload = {
+        'shipment_id': shipmentId,
+        'status': status.name,
+        'location': location,
+        'description': description,
+        'occurred_at': DateTime.now().toIso8601String(),
+      };
+      final res = await _db
+          .from('tracking_events')
+          .insert(payload)
+          .select()
+          .single();
+      return RepoResult.ok(TrackingEvent.fromMap((res as Map).cast<String, dynamic>()));
+    } catch (e) {
+      return RepoResult.fail(e);
+    }
+  }
+
   Future<RepoResult<Shipment>> create({
     required String userId,
     required Address origin,
