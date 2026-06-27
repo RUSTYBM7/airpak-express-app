@@ -451,6 +451,55 @@ class IosTextButton extends StatelessWidget {
   }
 }
 
+/// iOS-style secondary button — outlined, full-width, used next to a
+/// primary button on dialogs/forms.
+class IosSecondaryButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+  final Color? color;
+  const IosSecondaryButton({
+    super.key,
+    required this.label,
+    this.icon,
+    this.onPressed,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppColors.brand;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 50,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withValues(alpha: 0.4), width: 1.2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: c, size: 18),
+                const SizedBox(width: 6),
+              ],
+              Text(label,
+                  style: TextStyle(
+                      color: c, fontSize: 15, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// iOS-style text field: no filled background, hairline border, no
 /// floating label — just a clean rounded rectangle.
 class IosTextField extends StatelessWidget {

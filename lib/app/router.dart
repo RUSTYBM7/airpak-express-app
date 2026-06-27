@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/services/smartsupp_controller.dart';
+
 import '../features/admin/screens/admin_2fa_screen.dart';
 import '../features/admin/screens/admin_ai_studio_screen.dart';
 import '../features/admin/screens/admin_ai_templates_screen.dart';
@@ -43,6 +45,8 @@ import '../features/portal/screens/settings_screen.dart';
 import '../features/portal/screens/shipment_detail_screen.dart';
 import '../features/portal/screens/shipments_screen.dart';
 import '../features/portal/screens/support_chat_screen.dart';
+import '../features/portal/screens/live_chat_screen.dart';
+import '../features/portal/screens/notifications_screen.dart';
 import '../features/privacy/screens/privacy_screen.dart';
 import '../features/terms/screens/terms_screen.dart';
 import '../features/tracking/screens/live_map_screen.dart';
@@ -97,13 +101,16 @@ class AppRoutes {
 }
 
 GoRouter buildRouter(Ref ref) {
-  return GoRouter(
+  final smartsupp = ref.read(smartsuppControllerProvider);
+  final goRouter = GoRouter(
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: false,
     refreshListenable: _AuthRefresh(ref),
     redirect: (context, state) {
       final auth = ref.read(authControllerProvider);
       final loc = state.matchedLocation;
+      // Sync Smartsupp with the active route.
+      smartsupp.syncWithRoute(loc);
 
       // Splash manages its own routing — leave it alone.
       if (loc == AppRoutes.splash) return null;
@@ -241,7 +248,15 @@ GoRouter buildRouter(Ref ref) {
       ),
       GoRoute(
         path: AppRoutes.portalSupport,
-        builder: (_, __) => const SupportChatScreen(),
+        builder: (_, __) => const LiveChatScreen(userId: 'demo'),
+      ),
+      GoRoute(
+        path: '/portal/chat/:userId',
+        builder: (_, st) => LiveChatScreen(userId: st.pathParameters['userId'] ?? 'demo'),
+      ),
+      GoRoute(
+        path: '/portal/notifications',
+        builder: (_, __) => const NotificationsScreen(),
       ),
       GoRoute(
         path: AppRoutes.portalProfile,
@@ -327,6 +342,7 @@ GoRouter buildRouter(Ref ref) {
       ),
     ],
   );
+  return goRouter;
 }
 
 /// Bridge between Riverpod's StateNotifier and GoRouter's redirect listener.

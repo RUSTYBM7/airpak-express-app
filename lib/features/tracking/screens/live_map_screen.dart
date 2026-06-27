@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +12,6 @@ import '../../../app/design_system.dart';
 import '../../../app/router.dart';
 import '../../../core/data/repositories.dart';
 import '../../../core/models/shipment.dart';
-import '../../../core/widgets/motion.dart';
 import '../../../core/widgets/world_map.dart';
 import '../../auth/providers/auth_controller.dart';
 
@@ -109,6 +107,169 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen>
     // Center the map (reset zoom to 1.0, no translation)
     _xform.value = Matrix4.identity();
     HapticService.light();
+  }
+
+  void _showHistorySheet(BuildContext context) {
+    HapticService.selection();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(ctx).size.height * 0.72,
+          decoration: const BoxDecoration(
+            color: Color(0xFF0E1320),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36, height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.timeline_rounded, color: AppColors.brand, size: 22),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('Tracking history · ${widget.tracking}',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
+                    ),
+                  ],
+                ),
+              ),
+              Container(height: 0.5, color: Colors.white12),
+              Expanded(child: _buildHistoryList()),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHistoryList() {
+    final repo = ref.read(shipmentRepoProvider);
+    return FutureBuilder(
+      future: repo.events(_shipment?.id ?? ''),
+      builder: (ctx, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.brand),
+          );
+        }
+        if (!snap.hasData) {
+          return Center(
+            child: Text('No history yet',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13)),
+          );
+        }
+        final res = snap.data!;
+        final events = (res.data ?? <TrackingEvent>[]);
+        if (events.isEmpty) {
+          return Center(
+            child: Text('No history yet',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13)),
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          itemCount: events.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 14),
+          itemBuilder: (ctx, i) {
+            final e = events[i];
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  children: [
+                    Container(
+                      width: 12, height: 12,
+                      decoration: BoxDecoration(
+                        color: _eventColor(e.status),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: _eventColor(e.status).withValues(alpha: 0.6), blurRadius: 6, spreadRadius: 1),
+                        ],
+                      ),
+                    ),
+                    if (i < events.length - 1)
+                      Container(width: 2, height: 30, color: Colors.white24),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(e.status.label,
+                          style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w800)),
+                      if (e.location.isNotEmpty)
+                        Text(e.location,
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w600)),
+                      if ((e.description ?? '').isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(e.description!,
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 11.5, height: 1.4)),
+                        ),
+                      const SizedBox(height: 2),
+                      Text(DateFormat('MMM d, HH:mm').format(e.occurredAt),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Color _eventColor(ShipmentStatus s) {
+    switch (s) {
+      case ShipmentStatus.delivered: return AppColors.success;
+      case ShipmentStatus.outForDelivery: return AppColors.info;
+      case ShipmentStatus.inTransit: return AppColors.brand;
+      case ShipmentStatus.pickedUp: return AppColors.warning;
+      case ShipmentStatus.exception: return AppColors.danger;
+      default: return Colors.white;
+    }
+  }
+
+  Future<void> _shareTracking(BuildContext context) async {
+    HapticService.success();
+    final summary = '''
+AirPak Express — Live Tracking
+$widget.tracking
+Status: ${_shipment?.status.label ?? 'In transit'}
+Progress: ${(_simProgress * 100).toStringAsFixed(0)}%
+ETA: ${_fmtDur(_simEta)}
+Distance: ${_simDistanceKm.toStringAsFixed(0)} km
+Speed: ${_simSpeed.toStringAsFixed(0)} km/h
+
+Live map: https://web-rust-ten-91.vercel.app/portal/track/$widget.tracking
+''';
+    Clipboard.setData(ClipboardData(text: summary));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Tracking summary copied · PDF download coming next build'),
+        action: SnackBarAction(label: 'OK', onPressed: () {}),
+      ),
+    );
   }
 
   String _fmtDur(Duration d) {
@@ -362,18 +523,20 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen>
                                 children: [
                                   Expanded(
                                     child: _ActionButton(
-                                      icon: Icons.share_rounded,
-                                      label: 'Share',
-                                      onTap: () {
-                                        HapticService.success();
-                                        Clipboard.setData(ClipboardData(text: widget.tracking));
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Tracking number copied')),
-                                        );
-                                      },
+                                      icon: Icons.timeline_rounded,
+                                      label: 'History',
+                                      onTap: () => _showHistorySheet(context),
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _ActionButton(
+                                      icon: Icons.share_rounded,
+                                      label: 'Share / PDF',
+                                      onTap: () => _shareTracking(context),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: _ActionButton(
                                       icon: Icons.support_agent_rounded,

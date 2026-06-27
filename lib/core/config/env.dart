@@ -10,15 +10,15 @@ class AppEnv {
   // ── Supabase ──────────────────────────────────────────────────────────
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://zygoqqsgzhgpvlpttfbk.supabase.co',
+    defaultValue: 'https://prepxpvdpumkucdcwnmc.supabase.co',
   );
   static const String supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: '',
+    defaultValue: 'sb_publishable_6mquE4js5vd8UWNpg--waw_90b3SsE6',
   );
   static const String supabasePublishableKey = String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
-    defaultValue: '',
+    defaultValue: 'sb_publishable_6mquE4js5vd8UWNpg--waw_90b3SsE6',
   );
 
   // ── Maps ──────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ class AppEnv {
   ///   "custom"     → MAPLIBRE_STYLE_URL is used verbatim
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:3001',
+    defaultValue: 'https://airpak-express-backend.vercel.app',
   );
   static const bool liveBridgeEnabled = bool.fromEnvironment(
     'LIVE_BRIDGE',

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,16 +8,17 @@ import '../../../app/cupertino.dart';
 import '../../../app/design_system.dart';
 import '../../../app/ios_components.dart';
 import '../../../app/router.dart';
+import '../../../core/data/notification_center.dart';
 import '../../../core/data/repositories.dart';
 import '../../../core/models/shipment.dart';
 import '../../../core/widgets/app_widgets.dart';
-import '../../../core/widgets/motion.dart';
 import '../../auth/providers/auth_controller.dart';
+import '../../support/support_chat_controller.dart';
 
-/// Recent shipments + quick track-by-number. Tapping a shipment opens
-/// the live map. The previous MapLibre-based implementation was
-/// unreliable in headless Chrome, so this screen now uses the same
-/// reliable CustomPainter map at small preview scale.
+/// New tracking page = "ship column" + live map preview. Tapping a
+/// shipment (or pressing "View on full map") opens the full-screen
+/// Snapchat-style world map with pinch-zoom, then a tracking-history
+/// button, share/PDF, and chat support.
 class TrackingScreen extends ConsumerStatefulWidget {
   final String? initialTracking;
   const TrackingScreen({super.key, this.initialTracking});
@@ -46,14 +45,32 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     final t = _ctrl.text.trim();
     if (t.isEmpty) return;
     HapticService.light();
-    context.go('${AppRoutes.tracking}/$t');
+    context.push('${AppRoutes.tracking}/$t');
+  }
+
+  void _openLiveMap(String tracking) {
+    HapticService.light();
+    context.push('/portal/track/$tracking');
+  }
+
+  void _openChat() {
+    HapticService.selection();
+    context.push(AppRoutes.portalSupport);
+  }
+
+  void _openNotifications() {
+    HapticService.selection();
+    context.push('/portal/notifications');
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
-    final userId = auth.profile?.id;
+    final userId = auth.profile?.id ?? 'demo';
     final async = ref.watch(_shipmentsProvider(userId));
+    final chatState = ref.watch(supportChatControllerProvider(userId));
+    final notifs = ref.watch(notificationCenterProvider);
+    final unread = notifs.where((n) => !n.isRead).length;
     return Scaffold(
       backgroundColor: context.bgColor,
       body: SafeArea(
@@ -61,25 +78,78 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: Row(
+                  children: [
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Back',
+                      onPressed: () {
+                        if (context.canPop()) {
+                          context.pop();
+                        } else {
+                          context.go(AppRoutes.portalDashboard);
+                        }
+                      },
+                      icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.textColor, size: 18),
+                    ),
+                    const Spacer(),
+                    // Chat with unread badge
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          tooltip: 'Support chat',
+                          onPressed: _openChat,
+                          icon: Icon(Icons.support_agent_rounded, color: context.textColor, size: 20),
+                        ),
+                        if (chatState.hasUnreadAgentReply)
+                          Positioned(
+                            top: 6, right: 6,
+                            child: Container(
+                              width: 8, height: 8,
+                              decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(width: 4),
+                    // Notifications with badge
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          tooltip: 'Notifications',
+                          onPressed: _openNotifications,
+                          icon: Icon(Icons.notifications_none_rounded, color: context.textColor, size: 20),
+                        ),
+                        if (unread > 0)
+                          Positioned(
+                            top: 6, right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppColors.danger,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              child: Text(
+                                unread > 9 ? '9+' : '$unread',
+                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () => context.go(AppRoutes.portalDashboard),
-                          icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.textColor, size: 18),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          onPressed: () => _scanQR(),
-                          icon: Icon(Icons.qr_code_scanner_rounded, color: context.textColor, size: 20),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
                     Text('Track your parcel',
                         style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1, color: context.textColor)),
                     const SizedBox(height: 4),
@@ -102,15 +172,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 ),
               ),
             ),
+            // ── Ship column (your shipments) ────────────────────────────
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
               sliver: SliverToBoxAdapter(
                 child: Row(
                   children: [
                     Text('Your shipments',
                         style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: context.textColor)),
                     const Spacer(),
-                    Text('Tap to open live map',
+                    Text('Tap to open full live map',
                         style: TextStyle(fontSize: 11.5, color: context.textMutedColor, fontWeight: FontWeight.w600)),
                   ],
                 ),
@@ -126,18 +197,47 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               data: (res) {
                 final all = res.data ?? [];
                 if (all.isEmpty) {
-                  return const SliverToBoxAdapter(
-                    child: Padding(padding: EdgeInsets.all(40), child: EmptyState(icon: Icons.local_shipping_outlined, title: 'No shipments yet')),
+                  return SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+                        decoration: BoxDecoration(
+                          color: context.surfaceColor,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: context.borderColor),
+                        ),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 64, height: 64,
+                              decoration: BoxDecoration(
+                                color: AppColors.brandSoft,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Icon(Icons.local_shipping_rounded, color: AppColors.brand, size: 30),
+                            ),
+                            const SizedBox(height: 14),
+                            Text('No shipments yet',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.textColor)),
+                            const SizedBox(height: 4),
+                            Text('Search a tracking number above, or create a new shipment from the dashboard.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 13, color: context.textMutedColor, height: 1.45)),
+                          ],
+                        ),
+                      ),
+                    ),
                   );
                 }
                 return SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
                   sliver: SliverList.separated(
                     itemCount: all.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (ctx, i) => _ShipmentTrackCard(
                       shipment: all[i],
-                      onTap: () => context.push('${AppRoutes.tracking}/${all[i].trackingNumber}'),
+                      onTap: () => _openLiveMap(all[i].trackingNumber),
                     ),
                   ),
                 );
@@ -146,13 +246,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  void _scanQR() {
-    HapticService.light();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Camera scan coming soon — type the number above for now.')),
     );
   }
 }
@@ -172,7 +265,7 @@ class _ShipmentTrackCard extends StatelessWidget {
     return IosContextMenu(
       actions: [
         IosContextMenuItem(
-          label: 'View on map',
+          label: 'View on full map',
           icon: Icons.map_rounded,
           onTap: onTap,
         ),
@@ -216,7 +309,7 @@ class _ShipmentTrackCard extends StatelessWidget {
                   ClipRRect(
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
                     child: SizedBox(
-                      height: 120,
+                      height: 130,
                       width: double.infinity,
                       child: CustomPaint(
                         painter: _TrackMapPreviewPainter(
@@ -258,6 +351,24 @@ class _ShipmentTrackCard extends StatelessWidget {
                           Icon(Icons.fiber_manual_record, color: AppColors.success, size: 8),
                           SizedBox(width: 4),
                           Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 8, right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.fullscreen_rounded, size: 11, color: AppColors.brand),
+                          SizedBox(width: 3),
+                          Text('Tap for full map', style: TextStyle(color: AppColors.brand, fontSize: 9.5, fontWeight: FontWeight.w800)),
                         ],
                       ),
                     ),
@@ -319,7 +430,7 @@ class _ShipmentTrackCard extends StatelessWidget {
                           child: Container(
                             height: 5,
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(colors: [AppColors.brand, AppColors.warning]),
+                              gradient: const LinearGradient(colors: [AppColors.brand, AppColors.warning]),
                               borderRadius: BorderRadius.circular(99),
                             ),
                           ),
